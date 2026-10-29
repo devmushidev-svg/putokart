@@ -17,8 +17,10 @@ export const AJUSTES = {
   agarre: 14, // qué tan rápido la velocidad sigue al rumbo
   // derrape estilo Mario Kart: el kart dobla en curva cerrada sin perder velocidad;
   // doblar hacia adentro cierra la curva, al revés la abre, pero nunca deja de doblar
-  giroDerrapeAdentro: 2.1, giroDerrapeNeutro: 1.45, giroDerrapeAfuera: 0.75,
-  anguloDerrape: 0.5, // cuánto apunta la trompa hacia adentro (solo se ve, rad)
+  // (como MK8: sin tocar nada dobla parecido a doblar normal; adentro un poco más cerrado; afuera bien abierto)
+  giroDerrapeAdentro: 1.85, giroDerrapeNeutro: 1.3, giroDerrapeAfuera: 0.5,
+  agarreDerrape: 6, // en el derrape la velocidad sigue al rumbo un poco más lento: se siente que resbala
+  anguloDerrape: 0.34, // cuánto apunta la trompa hacia adentro (solo se ve, ~20°)
   velMinDerrape: 0.5, // fracción de la velocidad máxima para poder derrapar
   turbo: 1.4, // multiplicador de velocidad máxima con turbo
   nivelesDerrape: [0.7, 1.45, 2.3], // segundos de carga para cada nivel (azul, naranja, violeta)
@@ -299,7 +301,7 @@ export class Control {
 
     // la velocidad sigue al rumbo con agarre alto: el kart va a donde apunta
     const f = this.adelante();
-    this.dirVel.lerp(f, 1 - Math.exp(-A.agarre * dt)).normalize();
+    this.dirVel.lerp(f, 1 - Math.exp(-(this.derrapando ? A.agarreDerrape : A.agarre) * dt)).normalize();
     if (this.vel < 0) this.dirVel.copy(f);
 
     // aplicar: la velocidad se proyecta sobre el plano del suelo (así sube y baja rampas)

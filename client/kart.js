@@ -18,9 +18,9 @@ export const AJUSTES = {
   // derrape estilo Mario Kart: el kart dobla en curva cerrada sin perder velocidad;
   // doblar hacia adentro cierra la curva, al revés la abre, pero nunca deja de doblar
   // (como MK8: sin tocar nada dobla parecido a doblar normal; adentro un poco más cerrado; afuera bien abierto)
-  giroDerrapeAdentro: 1.85, giroDerrapeNeutro: 1.3, giroDerrapeAfuera: 0.5,
+  giroDerrapeAdentro: 1.3, giroDerrapeNeutro: 0.9, giroDerrapeAfuera: 0.35,
   agarreDerrape: 6, // en el derrape la velocidad sigue al rumbo un poco más lento: se siente que resbala
-  anguloDerrape: 0.34, // cuánto apunta la trompa hacia adentro (solo se ve, ~20°)
+  anguloDerrape: 0.28, // cuánto apunta la trompa hacia adentro (solo se ve, ~16°)
   velMinDerrape: 0.5, // fracción de la velocidad máxima para poder derrapar
   turbo: 1.4, // multiplicador de velocidad máxima con turbo
   nivelesDerrape: [0.7, 1.45, 2.3], // segundos de carga para cada nivel (azul, naranja, violeta)

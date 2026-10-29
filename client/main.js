@@ -33,7 +33,7 @@ escena.background = (() => {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 escena.fog = new THREE.Fog(0xcfe6ff, 160, 520);
-const camara = new THREE.PerspectiveCamera(70, 1, 0.1, 1500);
+const camara = new THREE.PerspectiveCamera(70, 1, 0.4, 900);
 escena.add(new THREE.HemisphereLight(0xdcefff, 0x4f7a3a, 1.1));
 const sol = new THREE.DirectionalLight(0xfff2d8, 2.4);
 sol.position.set(60, 120, 40);
@@ -326,7 +326,7 @@ function seguirCamara(dt) {
   const lejos = 7 + velN * 1.8, alto = 3 + velN * 0.4;
   camObj.copy(g).addScaledVector(f, -lejos).add(new THREE.Vector3(0, alto, 0));
   // en el derrape la cámara se corre un poco al costado
-  if (ct.derrapando) camObj.addScaledVector(new THREE.Vector3(f.z, 0, -f.x), ct.dirDerrape * 1.2);
+
   if (!C.camPos) C.camPos = camObj.clone();
   C.camPos.lerp(camObj, 1 - Math.exp(-7 * dt));
   camara.position.copy(C.camPos);

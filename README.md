@@ -16,8 +16,11 @@ Juego de karts tipo Mario Kart en el navegador. Se crea una sala, se pasa el lin
 | Derrapar | Espacio (mantener) | RB / LB | botón DERRAPE |
 | Reaparecer | R | Y | ↺ |
 
-**Derrape y mini-turbo:** mantené derrape mientras doblás. Las chispas pasan de azul → naranja → violeta; al soltar das un
-turbo más largo cuanto más alto el nivel. **Salida turbo:** acelerá justo cuando aparece el "1".
+**Derrape y mini-turbo (como Mario Kart):** tocá derrape para dar un saltito y elegí el lado con el giro; mantenelo apretado.
+El kart dobla en curva sin perder velocidad: doblar hacia adentro la cierra y carga más rápido, al revés la abre. Las chispas
+pasan de azul → naranja → violeta; al soltar das un turbo más largo cuanto más alto el nivel.
+
+Los números del manejo están todos en `AJUSTES` (`client/kart.js`). `node test/manejo.mjs` mide giro, derrape y turbo en un piso plano. **Salida turbo:** acelerá justo cuando aparece el "1".
 
 ## Estética
 

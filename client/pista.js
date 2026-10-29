@@ -79,7 +79,7 @@ function cinta(puntos, derechas, desde, hasta, { altoA = 0, altoB = 0, abajo = 0
     a.y += altoA - abajo; b.y += altoB - abajo;
     verts.push(a.x, a.y, a.z, b.x, b.y, b.z);
     uvs.push(0, dist / repV, 1, dist / repV);
-    if (i < n || !cerrar) if (i > 0) { const j = (i - 1) * 2; idx.push(j, j + 1, j + 2, j + 1, j + 3, j + 2); }
+    if (i > 0) { const j = (i - 1) * 2; idx.push(j, j + 1, j + 2, j + 1, j + 3, j + 2); } // incluye el tramo que cierra la vuelta
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
@@ -134,14 +134,15 @@ export function pistaPrueba() {
     const geo = muro(puntos, derechas, s * lim, 1.6);
     agregar(geo, mM, "pared", false).castShadow = true;
     // "pollera" de tierra debajo de los tramos elevados
-    const pol = muro(puntos, derechas, s * lim, -40, 0);
+    const pol = muro(puntos, derechas, s * lim, -40, 0); // pared de tierra hacia abajo
     agregar(pol, mat(texTierra(), [1, 1], { side: THREE.DoubleSide }), null, false);
   }
   // suelo del mundo
-  const piso = new THREE.Mesh(new THREE.PlaneGeometry(900, 900).rotateX(-Math.PI / 2), mat(texPasto(), [60, 60]));
-  piso.position.y = -0.3; piso.receiveShadow = true;
+  const piso = new THREE.Mesh(new THREE.PlaneGeometry(900, 900, 30, 30).rotateX(-Math.PI / 2), mat(texPasto(), [60, 60]));
+  // el piso del mundo va bien abajo: si está pegado a la pista, a lo lejos "atraviesa" el asfalto
+  piso.position.y = -2.5; piso.receiveShadow = true;
   grupo.add(piso);
-  colisiones.push(datosColision(piso.geometry.clone().translate(0, -0.3, 0), "fuera"));
+  colisiones.push(datosColision(piso.geometry.clone().translate(0, -2.5, 0), "fuera"));
 
   // línea de meta y arco
   const meta = new THREE.Mesh(new THREE.PlaneGeometry(ancho, 2.2).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: texMeta(), roughness: 0.8 }));
@@ -230,7 +231,7 @@ function decorar(grupo, puntos, minDist) {
     const x = (Math.random() - 0.5) * 520, z = (Math.random() - 0.5) * 420 - 60;
     if (!lejos(x, z)) continue;
     const e = 0.7 + Math.random() * 0.9;
-    m.compose(p.set(x, -0.3, z), q.setFromAxisAngle(ARRIBA, Math.random() * 6), s.set(e, e, e));
+    m.compose(p.set(x, -2.5, z), q.setFromAxisAngle(ARRIBA, Math.random() * 6), s.set(e, e, e));
     it.setMatrixAt(k, m); ic.setMatrixAt(k, m); k++;
   }
   it.count = ic.count = k;

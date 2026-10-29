@@ -12,12 +12,17 @@ export const AJUSTES = {
   velReversa: 10,
   roce: 7, // desacelera sin acelerar
   velFuera: 13, // velocidad máxima en el pasto
-  giro: 2.25, // rad/s
-  agarre: 9, // qué tan rápido la velocidad sigue al rumbo (alto = no patina)
-  agarreDerrape: 2.2,
+  giro: 1.75, // rad/s doblando normal
+  respuestaGiro: 9, // qué tan rápido llega al giro pedido (más bajo = más pesado)
+  agarre: 14, // qué tan rápido la velocidad sigue al rumbo
+  // derrape estilo Mario Kart: el kart dobla en curva cerrada sin perder velocidad;
+  // doblar hacia adentro cierra la curva, al revés la abre, pero nunca deja de doblar
+  giroDerrapeAdentro: 2.1, giroDerrapeNeutro: 1.45, giroDerrapeAfuera: 0.75,
+  anguloDerrape: 0.5, // cuánto apunta la trompa hacia adentro (solo se ve, rad)
+  velMinDerrape: 0.5, // fracción de la velocidad máxima para poder derrapar
   turbo: 1.4, // multiplicador de velocidad máxima con turbo
-  nivelesDerrape: [0.75, 1.6, 2.6], // segundos de derrape para cada nivel (azul, naranja, violeta)
-  turboDerrape: [0.65, 1.05, 1.5], // duración del turbo según el nivel
+  nivelesDerrape: [0.7, 1.45, 2.3], // segundos de carga para cada nivel (azul, naranja, violeta)
+  turboDerrape: [0.7, 1.1, 1.6], // duración del turbo según el nivel
   radio: 0.6,
 };
 const COLOR_NIVEL = [null, 0x3fa9ff, 0xff8a1f, 0xc64bff];
@@ -173,15 +178,16 @@ export function animarModelo(mod, dt, { vel = 0, giro = 0, derrape = 0, dirDerra
     if (w.pivote === w.r) { // rueda de Blender: girar y doblar sobre su propia rotación
       w.base ||= w.r.rotation.clone();
       w.giroAcum = (w.giroAcum || 0) + (vel * dt) / 0.38;
-      w.r.rotation.set(w.base.x + w.giroAcum, w.base.y + (w.del ? giro * 0.45 : 0), w.base.z, "YXZ");
+      w.r.rotation.set(w.base.x + w.giroAcum, w.base.y - (w.del ? giro * 0.45 : 0), w.base.z, "YXZ");
       continue;
     }
     w.r.rotation.x += (vel * dt) / 0.38;
-    if (w.del) w.pivote.rotation.y = giro * 0.45;
+    if (w.del) w.pivote.rotation.y = -giro * 0.45;
   }
-  mod.cuerpo.rotation.z = THREE.MathUtils.lerp(mod.cuerpo.rotation.z, -dirDerrape * 0.12 - giro * 0.04, 1 - Math.exp(-10 * dt));
-  mod.cuerpo.rotation.y = THREE.MathUtils.lerp(mod.cuerpo.rotation.y, dirDerrape * 0.32, 1 - Math.exp(-8 * dt));
-  mod.piloto.rotation.z = -giro * 0.15;
+  // en el derrape la trompa apunta hacia adentro de la curva y el kart se inclina hacia afuera
+  mod.cuerpo.rotation.z = THREE.MathUtils.lerp(mod.cuerpo.rotation.z, dirDerrape * 0.1 + giro * 0.035, 1 - Math.exp(-10 * dt));
+  mod.cuerpo.rotation.y = THREE.MathUtils.lerp(mod.cuerpo.rotation.y, -dirDerrape * AJUSTES.anguloDerrape - giro * dirDerrape * 0.12, 1 - Math.exp(-9 * dt));
+  mod.piloto.rotation.z = giro * 0.15;
   mod.chispas.emitir(derrape, dirDerrape);
   mod.chispas.actualizar(dt);
   for (const f of mod.fuegos) {
@@ -206,8 +212,10 @@ export class Control {
     this.tipoSuelo = "suelo";
     this.derrapando = false; this.dirDerrape = 0; this.tDerrape = 0; this.nivel = 0;
     this.tTurbo = 0;
-    this.salto = 0; // altura visual del saltito al empezar a derrapar
+    this.salto = 0; // altura visual del saltito
     this.giroVisual = 0;
+    this.velAng = 0; // velocidad de giro actual (se suaviza para que no sea instantáneo)
+    this.botonAntes = false; this.tBoton = 9; // para detectar el toque del botón de derrape
     this.choque = 0;
   }
   get pos() { const t = this.cuerpo.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
@@ -243,46 +251,55 @@ export class Control {
 
     // velocidad
     if (this.enSuelo) {
-      if (turbo) this.vel += A.acel * 2.2 * dt;
-      else if (e.acel && !e.freno) this.vel += (this.vel < 0 ? A.frenoReversa : A.acel * (1 - Math.max(0, this.vel) / max * 0.55)) * dt;
+      if (turbo) this.vel = Math.max(this.vel, Math.min(max, this.vel + A.acel * 2.5 * dt));
+      else if (e.acel && !e.freno) { if (this.vel < max) this.vel = Math.min(max, this.vel + (this.vel < 0 ? A.frenoReversa : A.acel * (1 - Math.max(0, this.vel) / max * 0.55)) * dt); }
       else if (e.freno) this.vel -= (this.vel > 0 ? A.frenoReversa : A.acel * 0.6) * dt;
       else this.vel -= Math.sign(this.vel) * Math.min(Math.abs(this.vel), A.roce * dt);
       if (this.vel > max) this.vel = Math.max(max, this.vel - (fuera ? 40 : 18) * dt);
       this.vel = Math.max(-A.velReversa, this.vel);
     }
 
-    // derrape: se empieza con el botón mientras se dobla, con saltito
+    // derrape como Mario Kart: tocás el botón → saltito; la dirección se elige con el giro
+    // (al tocar o durante los primeros instantes) y se mantiene mientras tengas el botón apretado
     const giro = THREE.MathUtils.clamp(e.giro || 0, -1, 1);
-    if (e.derrape && !this.derrapando && this.enSuelo && Math.abs(giro) > 0.25 && this.vel > 10) {
-      this.derrapando = true; this.dirDerrape = Math.sign(giro); this.tDerrape = 0; this.nivel = 0; this.salto = 0.35;
-      eventos.push("salto");
+    const toque = e.derrape && !this.botonAntes;
+    this.botonAntes = !!e.derrape;
+    this.tBoton = e.derrape ? (toque ? 0 : this.tBoton + dt) : 9;
+    if (toque && this.enSuelo && !this.derrapando) { this.salto = 0.32; eventos.push("salto"); }
+    if (e.derrape && !this.derrapando && this.tBoton < 0.45 && Math.abs(giro) > 0.3 && this.vel > A.velMax * A.velMinDerrape && !fuera) {
+      this.derrapando = true; this.dirDerrape = Math.sign(giro); this.tDerrape = 0; this.nivel = 0;
     }
-    if (this.derrapando && (!e.derrape || this.vel < 6 || fuera)) {
+    if (this.derrapando && (!e.derrape || this.vel < A.velMax * 0.35 || fuera)) {
       // al soltar: turbo según el nivel alcanzado
-      if (e.derrape === false && this.nivel > 0 && !fuera) { this.turbo(A.turboDerrape[this.nivel - 1]); eventos.push("turbo"); }
+      if (!e.derrape && this.nivel > 0 && !fuera) { this.turbo(A.turboDerrape[this.nivel - 1]); eventos.push("turbo"); }
       this.derrapando = false; this.dirDerrape = 0; this.nivel = 0;
     }
 
-    // giro
+    // giro: se calcula el giro pedido y la velocidad de giro se acerca suave (da peso al kart)
     const velAbs = Math.abs(this.vel);
-    const factor = Math.min(1, velAbs / 7) * (1 - Math.min(0.25, velAbs / A.velMax * 0.25)) * Math.sign(this.vel || 1);
-    let tasa;
+    let objetivo;
     if (this.derrapando) {
-      // doblar hacia el derrape lo cierra, al revés lo abre
-      tasa = this.dirDerrape * (1.25 + 0.85 * giro * this.dirDerrape) * A.giro * 0.62;
+      const s = giro * this.dirDerrape; // +1 = hacia adentro, -1 = hacia afuera
+      const g = s >= 0 ? THREE.MathUtils.lerp(A.giroDerrapeNeutro, A.giroDerrapeAdentro, s) : THREE.MathUtils.lerp(A.giroDerrapeNeutro, A.giroDerrapeAfuera, -s);
+      objetivo = this.dirDerrape * g;
+      // la carga del mini-turbo va más rápido doblando hacia adentro
       const antes = this.nivel;
-      this.tDerrape += dt * (0.7 + 0.6 * Math.max(0, giro * this.dirDerrape));
-      this.nivel = A.nivelesDerrape.filter((s) => this.tDerrape >= s).length;
+      this.tDerrape += dt * (s > 0.3 ? 1.15 : s < -0.3 ? 0.6 : 0.9);
+      this.nivel = A.nivelesDerrape.filter((x) => this.tDerrape >= x).length;
       if (this.nivel > antes) eventos.push("chispa" + this.nivel);
-    } else tasa = giro * A.giro * factor;
-    if (!this.enSuelo) tasa *= 0.35;
-    this.yaw -= tasa * dt; // + giro = derecha
+    } else {
+      // gira menos a muy baja velocidad y un poco menos a tope, en reversa al revés
+      const factor = Math.min(1, velAbs / 6) * (1 - 0.2 * Math.min(1, velAbs / A.velMax)) * Math.sign(this.vel || 1);
+      objetivo = giro * A.giro * factor;
+    }
+    if (!this.enSuelo) objetivo *= 0.5;
+    this.velAng += (objetivo - this.velAng) * (1 - Math.exp(-A.respuestaGiro * dt));
+    this.yaw -= this.velAng * dt; // + = derecha
     this.giroVisual = giro;
 
-    // la velocidad real sigue al rumbo con más o menos agarre (así patina en el derrape)
+    // la velocidad sigue al rumbo con agarre alto: el kart va a donde apunta
     const f = this.adelante();
-    const agarre = this.derrapando ? A.agarreDerrape : A.agarre;
-    this.dirVel.lerp(f, 1 - Math.exp(-agarre * dt)).normalize();
+    this.dirVel.lerp(f, 1 - Math.exp(-A.agarre * dt)).normalize();
     if (this.vel < 0) this.dirVel.copy(f);
 
     // aplicar: la velocidad se proyecta sobre el plano del suelo (así sube y baja rampas)
@@ -308,6 +325,7 @@ export class Control {
       this.vel = Math.sign(this.vel) * real;
       if (this.choque <= 0) { eventos.push("choque"); this.choque = 0.4; }
       if (this.derrapando) { this.derrapando = false; this.nivel = 0; this.dirDerrape = 0; }
+      this.velAng *= 0.3;
     }
   }
 

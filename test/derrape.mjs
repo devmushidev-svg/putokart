@@ -1,0 +1,21 @@
+import { chromium } from "playwright";
+const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const p = await (await b.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+const err = []; p.on("pageerror", (e) => err.push(e.message));
+await p.goto("http://127.0.0.1:8790/solo");
+await p.waitForFunction(() => window.__kart?.C, null, { timeout: 30000 });
+await p.waitForTimeout(4000);
+const r = await p.evaluate(() => {
+  const K = window.__kart, k = K.C.control, out = {};
+  K.entrada({ acel: true, giro: 0.3 }); K.avanzar(2.2);
+  out.vel0 = k.vel;
+  K.entrada({ acel: true, giro: -1, derrape: true }); K.avanzar(0.1);
+  out.empezo = k.derrapando; out.dir = k.dirDerrape;
+  K.avanzar(2.0); out.nivel = k.nivel; out.velDerrape = k.vel;
+  K.entrada({ acel: true, giro: 0, derrape: false }); K.avanzar(1 / 60);
+  out.turbo = k.tTurbo; K.avanzar(0.5); out.velTurbo = k.vel;
+  return out;
+});
+await p.screenshot({ path: "/tmp/claude-0/-home-claude/7ef66f04-94ad-5331-afbb-f831b821f135/scratchpad/k5.png" });
+console.log(JSON.stringify({ r, err }));
+await b.close();

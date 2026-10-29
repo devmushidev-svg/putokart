@@ -1,0 +1,13 @@
+import { chromium } from "playwright";
+const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
+await ctx.addInitScript(() => localStorage.setItem("kart_nombre", "Verde"));
+const p = await ctx.newPage(); const err = []; p.on("pageerror", (e) => err.push(e.message));
+await p.goto("http://127.0.0.1:8790/solo");
+await p.waitForFunction(() => window.__kart?.C, null, { timeout: 30000 });
+await p.waitForTimeout(4000);
+await p.evaluate(() => { window.__kart.entrada({ acel: true, giro: 0.2 }); window.__kart.avanzar(4); window.__kart.entrada({ acel: true, giro: -1, derrape: true }); window.__kart.avanzar(1.2); });
+await p.waitForTimeout(400);
+await p.screenshot({ path: "/tmp/claude-0/-home-claude/7ef66f04-94ad-5331-afbb-f831b821f135/scratchpad/m1.png" });
+console.log(JSON.stringify(err));
+await b.close();

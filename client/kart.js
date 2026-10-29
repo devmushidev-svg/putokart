@@ -20,7 +20,8 @@ export const AJUSTES = {
   // (como MK8: sin tocar nada dobla parecido a doblar normal; adentro un poco más cerrado; afuera bien abierto)
   giroDerrapeAdentro: 1.3, giroDerrapeNeutro: 0.9, giroDerrapeAfuera: 0.35,
   agarreDerrape: 6, // en el derrape la velocidad sigue al rumbo un poco más lento: se siente que resbala
-  anguloDerrape: 0.28, // cuánto apunta la trompa hacia adentro (solo se ve, ~16°)
+  anguloDerrape: 0.42, // ángulo entre la trompa y hacia dónde se mueve en el derrape (~24°)
+  giroDeriva: 6, // qué tan rápido la trompa se cruza al entrar y se endereza al salir
   velMinDerrape: 0.5, // fracción de la velocidad máxima para poder derrapar
   turbo: 1.4, // multiplicador de velocidad máxima con turbo
   nivelesDerrape: [0.7, 1.45, 2.3], // segundos de carga para cada nivel (azul, naranja, violeta)
@@ -188,7 +189,7 @@ export function animarModelo(mod, dt, { vel = 0, giro = 0, derrape = 0, dirDerra
   }
   // en el derrape la trompa apunta hacia adentro de la curva y el kart se inclina hacia afuera
   mod.cuerpo.rotation.z = THREE.MathUtils.lerp(mod.cuerpo.rotation.z, dirDerrape * 0.1 + giro * 0.035, 1 - Math.exp(-10 * dt));
-  mod.cuerpo.rotation.y = THREE.MathUtils.lerp(mod.cuerpo.rotation.y, -dirDerrape * AJUSTES.anguloDerrape - giro * dirDerrape * 0.12, 1 - Math.exp(-9 * dt));
+  mod.cuerpo.rotation.y = THREE.MathUtils.lerp(mod.cuerpo.rotation.y, 0, 1 - Math.exp(-9 * dt));
   mod.piloto.rotation.z = giro * 0.15;
   mod.chispas.emitir(derrape, dirDerrape);
   mod.chispas.actualizar(dt);
@@ -206,7 +207,10 @@ export class Control {
     this.cuerpo = mundo.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).lockRotations().setCcdEnabled(true).setLinearDamping(0));
     this.col = mundo.createCollider(RAPIER.ColliderDesc.ball(AJUSTES.radio).setFriction(0).setRestitution(0.15).setDensity(2), this.cuerpo);
     this.filtroSuelo = filtroSuelo; // (collider) => tipo de suelo o null
-    this.yaw = yaw;
+    // dos direcciones: "rumbo" = hacia dónde se mueve; "yaw" = hacia dónde apunta la trompa.
+    // Manejando normal son iguales; en el derrape la trompa se cruza hacia adentro y el kart sigue
+    // avanzando por la curva: así se sienten las dos direcciones a la vez.
+    this.rumbo = yaw; this.yaw = yaw; this.deriva = 0;
     this.vel = 0; // velocidad hacia adelante (puede ser negativa)
     this.dirVel = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)); // hacia dónde se mueve en realidad
     this.normal = ARRIBA.clone();
@@ -221,14 +225,15 @@ export class Control {
     this.choque = 0;
   }
   get pos() { const t = this.cuerpo.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
-  adelante() { return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)); }
+  adelante() { return new THREE.Vector3(Math.sin(this.rumbo), 0, Math.cos(this.rumbo)); } // hacia dónde se mueve
+  nariz() { return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)); } // hacia dónde apunta
 
   turbo(seg) { this.tTurbo = Math.max(this.tTurbo, seg); }
 
   colocar(pos, yaw) {
     this.cuerpo.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true);
     this.cuerpo.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    this.yaw = yaw; this.vel = 0; this.dirVel.set(Math.sin(yaw), 0, Math.cos(yaw));
+    this.yaw = this.rumbo = yaw; this.deriva = 0; this.vel = 0; this.dirVel.set(Math.sin(yaw), 0, Math.cos(yaw));
     this.derrapando = false; this.nivel = 0; this.tTurbo = 0;
   }
 
@@ -296,7 +301,11 @@ export class Control {
     }
     if (!this.enSuelo) objetivo *= 0.5;
     this.velAng += (objetivo - this.velAng) * (1 - Math.exp(-A.respuestaGiro * dt));
-    this.yaw -= this.velAng * dt; // + = derecha
+    this.rumbo -= this.velAng * dt; // + = derecha
+    // la trompa se cruza hacia adentro del derrape (doblando hacia adentro se cruza un poco más)
+    const objDeriva = this.derrapando ? -this.dirDerrape * (A.anguloDerrape + 0.1 * giro * this.dirDerrape) : 0;
+    this.deriva += (objDeriva - this.deriva) * (1 - Math.exp(-A.giroDeriva * dt));
+    this.yaw = this.rumbo + this.deriva;
     this.giroVisual = giro;
 
     // la velocidad sigue al rumbo con agarre alto: el kart va a donde apunta
@@ -335,7 +344,7 @@ export class Control {
   aplicarModelo(mod) {
     const p = this.pos;
     mod.g.position.set(p.x, p.y - AJUSTES.radio + Math.sin(this.salto * Math.PI / 0.35) * 0.35 * (this.salto > 0 ? 1 : 0), p.z);
-    const f = this.adelante();
+    const f = this.nariz();
     const derecha = new THREE.Vector3().crossVectors(f, this.normal).normalize();
     const fn = new THREE.Vector3().crossVectors(this.normal, derecha).normalize();
     const m = new THREE.Matrix4().makeBasis(derecha.negate(), this.normal, fn);

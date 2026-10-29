@@ -13,14 +13,14 @@ function nuevo() {
 }
 const r = {};
 { const { k, correr } = nuevo(); correr(3, { acel: true }); r.velMax = +k.vel.toFixed(1); r.t = 0;
-  const y = k.yaw; correr(1, { acel: true, giro: 1 }); r.giroNormal1s = +(y - k.yaw).toFixed(2); r.velGirando = +k.vel.toFixed(1); }
+  const y = k.rumbo; correr(1, { acel: true, giro: 1 }); r.giroNormal1s = +(y - k.rumbo).toFixed(2); r.velGirando = +k.vel.toFixed(1); }
 for (const [nombre, g] of [["adentro", -1], ["neutro", 0], ["afuera", 1]]) {
   const { k, ev, correr } = nuevo();
   correr(3, { acel: true });
   correr(0.1, { acel: true, giro: -1, derrape: true }); // toque + izquierda
-  const y = k.yaw;
+  const y = k.rumbo;
   correr(2.4, { acel: true, giro: g, derrape: true });
-  r[nombre] = { derrapa: k.derrapando, giro: +(k.yaw - y).toFixed(2), nivel: k.nivel, vel: +k.vel.toFixed(1) };
+  r[nombre] = { derrapa: k.derrapando, giro: +(k.rumbo - y).toFixed(2), anguloTrompa: +((k.yaw - k.rumbo) * 57.3).toFixed(0), nivel: k.nivel, vel: +k.vel.toFixed(1) };
   correr(1 / 60, { acel: true, giro: 0, derrape: false });
   r[nombre].turbo = +k.tTurbo.toFixed(2);
   correr(0.5, { acel: true });

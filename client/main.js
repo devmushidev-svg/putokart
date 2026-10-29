@@ -260,7 +260,7 @@ function actualizarCarrera(dt) {
   c.vuelta = Math.max(c.vuelta, Math.min(vueltaAhora, c.vueltas));
   // ¿va al revés?
   const dirPista = recorrido.direccion(c.idx);
-  const dot = Math.cos(dirPista - ct.yaw);
+  const dot = Math.cos(dirPista - ct.rumbo);
   c.alReves = dot < -0.3 && Math.abs(ct.vel) > 4 && !antesGo ? c.alReves + dt : 0;
 
   // modelo y cámara

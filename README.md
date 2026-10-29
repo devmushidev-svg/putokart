@@ -19,6 +19,13 @@ Juego de karts tipo Mario Kart en el navegador. Se crea una sala, se pasa el lin
 **Derrape y mini-turbo:** mantené derrape mientras doblás. Las chispas pasan de azul → naranja → violeta; al soltar das un
 turbo más largo cuanto más alto el nivel. **Salida turbo:** acelerá justo cuando aparece el "1".
 
+## Estética
+
+Estilo PS1 + televisor CRT (activado por defecto; botón 📺 o tecla **C** para apagarlo): la escena se dibuja a ~270 píxeles
+de alto, los vértices tiemblan como en PlayStation 1, texturas sin suavizado, colores de 15 bits con tramado, y encima
+curvatura, líneas de barrido, máscara de fósforo y viñeta (`client/retro.js`). Para los modelos: pocos polígonos y
+texturas chicas (128-256 px) se ven mejor que texturas grandes.
+
 ## Modelos de Blender
 
 Exportar como **glTF 2.0 binario (.glb)**, con escala y rotación aplicadas (Ctrl+A).

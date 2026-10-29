@@ -5,6 +5,7 @@ import { pistaPrueba, pistaGLB, Recorrido } from "./pista.js";
 import { crearModelo, animarModelo, Control, AJUSTES, usarPlantilla } from "./kart.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Sonido } from "./sonido.js";
+import { FiltroCRT, objetoRetro, uniformes } from "./retro.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -40,8 +41,24 @@ sol.castShadow = true;
 sol.shadow.mapSize.set(2048, 2048);
 Object.assign(sol.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 10, far: 300 });
 escena.add(sol, sol.target);
+// estética PS1 + tele CRT (se puede apagar con el botón 📺 o la tecla C)
+let retro = leer("kart_retro", "1") === "1";
+const crt = new FiltroCRT(render);
+function aplicarRetro() {
+  uniformes.uSnapOn.value = retro ? 1 : 0;
+  render.setPixelRatio(retro ? 1 : Math.min(devicePixelRatio, celular ? 1.25 : 1.75));
+  render.shadowMap.enabled = !retro && !celular;
+  sol.castShadow = !retro;
+  escena.fog.near = retro ? 70 : 160; escena.fog.far = retro ? 330 : 520;
+  escena.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => (m.needsUpdate = true)); });
+  ajustarTamano();
+  const b = document.querySelector("#crt"); if (b) b.classList.toggle("on", retro);
+}
+function alternarRetro() { retro = !retro; guardar("kart_retro", retro ? "1" : "0"); aplicarRetro(); }
+addEventListener("keydown", (e) => { if (e.code === "KeyC" && e.target.tagName !== "INPUT") alternarRetro(); });
 function ajustarTamano() {
   render.setSize(innerWidth, innerHeight, false);
+  crt.tamano(innerWidth, innerHeight, celular);
   camara.aspect = innerWidth / innerHeight;
   camara.fov = innerWidth < innerHeight ? 82 : 70;
   camara.updateProjectionMatrix();
@@ -66,6 +83,7 @@ async function cargarPista() {
     if (r.ok && (r.headers.get("content-type") || "").includes("gltf")) usarPlantilla((await new GLTFLoader().loadAsync("/modelos/kart.glb")).scene);
   } catch {}
   escena.add(pista.grupo);
+  objetoRetro(pista.grupo);
   recorrido = new Recorrido(pista.camino);
 }
 function crearMundo() {
@@ -117,8 +135,20 @@ let C = null; // carrera en curso
 const remotos = new Map(); // id → { mod, buf: [], cuerpo, nombre, color, p }
 let miId = null;
 
+// sombra redonda debajo del kart (barata, y como en los juegos de PS1)
+const texSombra = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 4, 32, 32, 30);
+  gr.addColorStop(0, "rgba(0,0,0,.55)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
 function nuevoModelo(color, nombre) {
   const m = crearModelo(new THREE.Color(color), nombre);
+  const sombra = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: texSombra, transparent: true, depthWrite: false }));
+  sombra.position.y = 0.04;
+  m.cuerpo.add(sombra);
+  objetoRetro(m.g);
   escena.add(m.g);
   return m;
 }
@@ -335,6 +365,7 @@ function pantallaCarrera() {
       <div class="hud-vel"><b id="h-vel">0</b><small>km/h</small><div class="barra-turbo"><i id="h-turbo"></i></div></div>
       <div id="aviso" class="aviso"></div><div id="aviso-grande" class="aviso-grande"></div>
       <button class="btn-chico mudo" id="mudo">${Sonido.mudo ? "🔇" : "🔊"}</button>
+      <button class="btn-chico crt ${retro ? "on" : ""}" id="crt" title="filtro de tele (C)">📺</button>
       ${celular ? `<div class="tactil">
         <div class="zona-giro" id="zona-giro"><div class="palanca"><i id="perilla"></i></div></div>
         <button class="btn-t derrape" id="t-derrape">DERRAPE</button>
@@ -342,6 +373,7 @@ function pantallaCarrera() {
         <button class="btn-t reaparecer" id="t-reap">↺</button></div>` : `<div class="ayuda-teclas">W/↑ acelerar · S/↓ frenar · A D/← → doblar · ESPACIO derrapar (soltalo para el turbo) · R reaparecer</div>`}
     </div>`;
   $("#mudo").onclick = () => { Sonido.alternar(); actualizarBotonMudo(); };
+  $("#crt").onclick = alternarRetro;
   prepararMinimapa();
   if (celular) controlesTactiles();
 }
@@ -472,6 +504,7 @@ function pantallaInicio() {
     <input id="nombre" maxlength="16" placeholder="tu nombre" value="${esc(leer("kart_nombre", ""))}">
     <button class="boton" id="crear">Crear sala</button>
     <button class="boton sec" id="solo">Practicar solo</button>
+    <button class="btn-chico crt ${retro ? "on" : ""}" id="crt">📺 filtro de tele</button>
     <div class="ayuda">Creás una sala y le pasás el link a tus amigos (hasta 8).</div></div></div>`;
   const nombre = () => { const n = $("#nombre").value.trim(); if (!n) { $("#nombre").focus(); Sonido.error(); return null; } guardar("kart_nombre", n); return n; };
   $("#crear").onclick = async () => {
@@ -481,6 +514,7 @@ function pantallaInicio() {
     location.href = "/s/" + id;
   };
   $("#solo").onclick = () => { if (nombre()) location.href = "/solo"; };
+  $("#crt").onclick = alternarRetro;
 }
 
 function practicar() {
@@ -575,12 +609,14 @@ function bucle() {
   requestAnimationFrame(bucle);
   const dt = Math.min(0.05, reloj.getDelta());
   if (C) actualizarCarrera(dt); else vistaFondo(dt);
-  render.render(escena, camara);
+  if (retro) crt.dibujar(escena, camara, performance.now() / 1000);
+  else render.render(escena, camara);
 }
 
 // ================= arranque =================
 const ruta = location.pathname;
 await cargarPista();
+aplicarRetro();
 if (ruta.startsWith("/s/")) { salaId = ruta.slice(3).replace(/\/$/, ""); ui.innerHTML = '<div class="inicio"><div class="caja"><h1 class="logo">PUTO<span>KART</span></h1><div class="ayuda">conectando…</div></div></div>'; conectar(); }
 else if (ruta.startsWith("/solo")) practicar();
 else pantallaInicio();

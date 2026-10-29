@@ -95,3 +95,9 @@ input:focus { border-color: var(--amarillo); }
 .tabla tr.sep td { border-top: 2px solid #fff4; }
 .tabla tr.yo { background: #ffd23f26; }
 .resultados td:first-child { font: 400 26px var(--f-tit); color: var(--amarillo); width: 52px; }
+
+/* filtro de tele */
+.btn-chico.crt { margin-top: 12px; }
+.btn-chico.crt.on { background: #ffd23f; color: #14213d; }
+.hud .crt { right: 64px; top: 92px; pointer-events: auto; margin: 0; }
+@media (pointer: coarse) { .hud .crt { top: 128px; right: 12px; } }

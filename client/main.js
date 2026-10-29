@@ -355,13 +355,17 @@ function actualizarCarrera(dt) {
   const yk = yo.control;
   const velN = Math.abs(yk.vel) / AJUSTES.velMax;
   // velocidad en pantalla: rayas anime + desenfoque radial; naranja con turbo, arcoíris con estrella, celeste con rebufo
-  let intV = Math.max(0, (velN - 0.8) * 2.5), colV = 0xffffff, bordeV = 0xffffff;
-  if (yo.rebufo > 0.15) { intV = Math.max(intV, 0.35 + yo.rebufo * 0.5); colV = 0xffffff; bordeV = 0xbfe6ff; }
-  if (yk.tTurbo > 0) { intV = 1; colV = 0xffe9a8; bordeV = 0xff8a1a; }
-  if (yk.tEstrella > 0) { intV = Math.max(intV, 0.85); const t = performance.now() / 400; colV = new THREE.Color().setHSL(t % 1, 1, 0.75); bordeV = new THREE.Color().setHSL((t + 0.3) % 1, 1, 0.55); }
+  // El turbo pasa casi todo el tiempo (derrapes, flechas, rebufo), así que no se marca entero:
+  // solo un golpe corto de rayas cuando arranca, que se apaga en medio segundo. Fijo, solo con la estrella.
+  if (yk.tTurbo > 0 && !C.turboAntes) C.pulso = Math.min(1, 0.45 + yk.tTurbo * 0.25);
+  C.turboAntes = yk.tTurbo > 0;
+  C.pulso = (C.pulso || 0) * Math.exp(-3.5 * dt);
+  let intV = C.pulso * 0.55, colV = 0xffffff, bordeV = 0xffffff;
+  if (yk.tTurbo > 0) colV = 0xffe9a8;
+  if (yk.tEstrella > 0) { intV = Math.max(intV, 0.4); const t = performance.now() / 400; colV = new THREE.Color().setHSL(t % 1, 1, 0.75); bordeV = new THREE.Color().setHSL((t + 0.3) % 1, 1, 0.55); }
   if (!yk.enSuelo || antesGo) intV *= 0.5;
-  lineas.actualizar(dt, intV, colV, bordeV);
-  zoomVel += ((yk.tTurbo > 0 ? 1 : Math.max(0, velN - 0.75) * 2) - zoomVel) * (1 - Math.exp(-6 * dt));
+  lineas.actualizar(dt, Math.min(0.55, intV), colV, bordeV);
+  zoomVel += (C.pulso * 0.35 - zoomVel) * (1 - Math.exp(-8 * dt));
   seguirCamara(dt);
   Sonido.motor(Math.abs(yk.vel) / (AJUSTES.velMax * AJUSTES.turbo), e.acel, yk.derrapando ? Math.max(1, yk.nivel) : 0, !yo.terminado || Math.abs(yk.vel) > 1);
   // ¿va al revés?
@@ -505,7 +509,7 @@ function seguirCamara(dt) {
   C.camPos.lerp(camObj, 1 - Math.exp(-(turbo ? 4.5 : 7) * dt));
   camara.position.copy(C.camPos);
   // a fondo, la cámara vibra un poquito (como el motor al máximo)
-  const vib = (turbo ? 0.06 : Math.max(0, velN - 0.85) * 0.25);
+  const vib = (C.pulso || 0) * 0.05;
   camara.position.y += (Math.random() - 0.5) * vib;
   if (temblor > 0) { camara.position.x += (Math.random() - 0.5) * temblor; camara.position.y += (Math.random() - 0.5) * temblor; temblor = Math.max(0, temblor - dt * 2); }
   camMira.copy(g).addScaledVector(f, 4).y += 1.3;

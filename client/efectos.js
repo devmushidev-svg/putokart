@@ -92,16 +92,16 @@ export class LineasVelocidad {
           float N = 64.0, s = floor(a * N), f = fract(a * N);
           float tk = floor(uT * 20.0), ft = fract(uT * 20.0);
           float sh = h(s + tk * 13.7);
-          float hay = step(1.0 - uInt * 0.75, sh);
-          float ancho = 0.15 + 0.45 * h(s * 7.3 + tk);
+          float hay = step(1.0 - uInt * 0.6, sh);
+          float ancho = 0.1 + 0.25 * h(s * 7.3 + tk);
           float raya = 1.0 - smoothstep(ancho * 0.35, ancho * 0.5, abs(f - 0.5));
           // cada raya arranca a distinta distancia del centro y en su vida corre hacia afuera
-          float r0 = 0.5 - 0.22 * uInt + 0.3 * h(s * 3.1 + tk * 1.7) + ft * 0.18;
+          float r0 = 0.62 - 0.12 * uInt + 0.3 * h(s * 3.1 + tk * 1.7) + ft * 0.18;
           float m = hay * raya * smoothstep(r0, r0 + 0.12, r);
           // el borde de la pantalla se tiñe (blanco, naranja con turbo, arcoíris con estrella)
           float borde = smoothstep(0.38, 1.0, r) * uInt;
           vec3 c = mix(uBorde, uCol, m);
-          float alfa = clamp(m * 0.85 + borde * 0.32, 0.0, 0.9);
+          float alfa = clamp(m * 0.6 + borde * 0.12, 0.0, 0.7);
           if (alfa < 0.01) discard;
           gl_FragColor = vec4(c, alfa);
         }`,

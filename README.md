@@ -13,7 +13,7 @@ Juego de karts tipo Mario Kart en el navegador. Se crea una sala, se pasa el lin
 | Acelerar | W / ↑ | A o RT | automático |
 | Frenar / reversa | S / ↓ | B o LT | botón FRENO |
 | Doblar | A D / ← → | palanca | arrastrar a la izquierda de la pantalla |
-| Derrapar | Espacio (mantener) | RB / LB | botón DERRAPE |
+| Derrapar | Shift (mantener) | RB / LB | botón DERRAPE |
 | Reaparecer | R | Y | ↺ |
 
 **Derrape y mini-turbo (como Mario Kart):** tocá derrape para dar un saltito y elegí el lado con el giro; mantenelo apretado.

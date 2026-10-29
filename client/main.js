@@ -102,7 +102,7 @@ const teclas = new Set();
 addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   teclas.add(e.code);
-  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight"].includes(e.code)) e.preventDefault();
   if (e.code === "KeyM") { Sonido.alternar(); actualizarBotonMudo(); }
 });
 addEventListener("keyup", (e) => teclas.delete(e.code));
@@ -113,7 +113,7 @@ function leerEntrada() {
   if (entradaPrueba) return { giro: 0, acel: false, freno: false, derrape: false, reaparecer: false, ...entradaPrueba };
   const k = (...c) => c.some((x) => teclas.has(x));
   let giro = (k("KeyD", "ArrowRight") ? 1 : 0) - (k("KeyA", "ArrowLeft") ? 1 : 0);
-  let acel = k("KeyW", "ArrowUp"), freno = k("KeyS", "ArrowDown"), derrape = k("Space", "ShiftLeft", "ShiftRight", "KeyK");
+  let acel = k("KeyW", "ArrowUp"), freno = k("KeyS", "ArrowDown"), derrape = k("ShiftLeft", "ShiftRight");
   let reaparecer = k("KeyR");
   for (const gp of navigator.getGamepads ? navigator.getGamepads() : []) {
     if (!gp) continue;
@@ -370,7 +370,7 @@ function pantallaCarrera() {
         <div class="zona-giro" id="zona-giro"><div class="palanca"><i id="perilla"></i></div></div>
         <button class="btn-t derrape" id="t-derrape">DERRAPE</button>
         <button class="btn-t freno" id="t-freno">FRENO</button>
-        <button class="btn-t reaparecer" id="t-reap">↺</button></div>` : `<div class="ayuda-teclas">W/↑ acelerar · S/↓ frenar · A D/← → doblar · ESPACIO derrapar (soltalo para el turbo) · R reaparecer</div>`}
+        <button class="btn-t reaparecer" id="t-reap">↺</button></div>` : `<div class="ayuda-teclas">W/↑ acelerar · S/↓ frenar · A D/← → doblar · SHIFT derrapar (soltalo para el turbo) · R reaparecer</div>`}
     </div>`;
   $("#mudo").onclick = () => { Sonido.alternar(); actualizarBotonMudo(); };
   $("#crt").onclick = alternarRetro;

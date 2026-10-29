@@ -3,6 +3,8 @@
   "name": "putokart",
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
+  // link público putokart.<cuenta>.workers.dev
+  "workers_dev": true,
   // el cliente (Three.js + Rapier) se empaqueta en public/juego.js antes de desplegar
   "build": { "command": "npm run build" },
   "assets": {

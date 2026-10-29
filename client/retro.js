@@ -41,10 +41,10 @@ export class FiltroCRT {
     this.render = render;
     this.objetivo = new THREE.WebGLRenderTarget(320, 240, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: THREE.HalfFloatType, samples: 0 });
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { tImagen: { value: this.objetivo.texture }, uBaja: { value: new THREE.Vector2(320, 240) }, uTiempo: { value: 0 } },
+      uniforms: { tImagen: { value: this.objetivo.texture }, uBaja: { value: new THREE.Vector2(320, 240) }, uTiempo: { value: 0 }, uZoom: { value: 0 } },
       vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: `
-        uniform sampler2D tImagen; uniform vec2 uBaja; uniform float uTiempo; varying vec2 vUv;
+        uniform sampler2D tImagen; uniform vec2 uBaja; uniform float uTiempo, uZoom; varying vec2 vUv;
         vec2 curvar(vec2 uv) { uv = uv * 2.0 - 1.0; vec2 o = abs(uv.yx) / vec2(5.5, 4.5); uv += uv * o * o; return uv * 0.5 + 0.5; }
         float bayer(vec2 p) {
           int x = int(mod(p.x, 4.0)), y = int(mod(p.y, 4.0)), i = x + y * 4;
@@ -54,8 +54,17 @@ export class FiltroCRT {
         void main() {
           vec2 uv = curvar(vUv);
           if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
-          float ab = 0.9 / uBaja.x;
-          vec3 c = vec3(texture2D(tImagen, uv + vec2(ab, 0.0)).r, texture2D(tImagen, uv).g, texture2D(tImagen, uv - vec2(ab, 0.0)).b);
+          // desenfoque radial con la velocidad: los bordes se estiran hacia el centro
+          vec2 d = uv - vec2(0.5, 0.56);
+          float r2 = dot(d, d);
+          vec2 paso = d * uZoom * 0.09 * r2;
+          vec2 ab = vec2(0.9 / uBaja.x, 0.0) + d * uZoom * 0.012;
+          vec3 c = vec3(0.0);
+          for (int i = 0; i < 6; i++) {
+            vec2 q = uv - paso * float(i);
+            c += vec3(texture2D(tImagen, q + ab).r, texture2D(tImagen, q).g, texture2D(tImagen, q - ab).b);
+          }
+          c /= 6.0;
           // un poco de brillo que se corre (fósforo)
           c += texture2D(tImagen, uv - vec2(2.0 / uBaja.x, 0.0)).rgb * 0.12;
           gl_FragColor = vec4(c, 1.0);
@@ -90,7 +99,8 @@ export class FiltroCRT {
     this.mat.uniforms.uBaja.value.set(ancho, alto);
     uniformes.uSnap.value.set(ancho, alto);
   }
-  dibujar(escena, camara, t) {
+  dibujar(escena, camara, t, zoom = 0) {
+    this.mat.uniforms.uZoom.value = zoom;
     const r = this.render;
     r.setRenderTarget(this.objetivo);
     r.render(escena, camara);

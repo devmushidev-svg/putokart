@@ -74,38 +74,52 @@ export class Particulas {
   }
 }
 
-// ---------- líneas de velocidad: rayas que pasan volando alrededor de la cámara ----------
+// ---------- líneas de velocidad estilo anime ----------
+// Rayas en cuña que salen del centro de la pantalla hacia los bordes y parpadean muy rápido (cada raya
+// cambia de lugar 20 veces por segundo). Va dibujado encima de todo, dentro de la imagen chica,
+// así que también se pixela con el filtro PS1.
 export class LineasVelocidad {
-  constructor(camara, n = 70) {
-    this.n = n;
-    const pos = new Float32Array(n * 6);
-    this.geo = new THREE.BufferGeometry();
-    this.geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    this.mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
-    this.lineas = new THREE.LineSegments(this.geo, this.mat);
-    this.lineas.frustumCulled = false;
-    this.lineas.renderOrder = 20;
-    camara.add(this.lineas);
-    this.datos = Array.from({ length: n }, () => this.nueva({}, true));
-  }
-  nueva(l, primera = false) {
-    const a = Math.random() * Math.PI * 2, r = 2.2 + Math.random() * 3.5;
-    l.x = Math.cos(a) * r * 1.4; l.y = Math.sin(a) * r * 0.9; l.z = primera ? -Math.random() * 40 : -40 - Math.random() * 10;
-    l.largo = 2 + Math.random() * 5;
-    return l;
-  }
-  // intensidad 0..1 (0 = no se ven), vel en m/s
-  actualizar(dt, intensidad, vel) {
-    this.mat.opacity += (Math.min(0.55, intensidad) - this.mat.opacity) * (1 - Math.exp(-6 * dt));
-    this.lineas.visible = this.mat.opacity > 0.01;
-    if (!this.lineas.visible) return;
-    const p = this.geo.attributes.position.array, avance = (vel * 1.6 + 30) * dt;
-    this.datos.forEach((l, i) => {
-      l.z += avance;
-      if (l.z > -1) this.nueva(l);
-      p.set([l.x, l.y, l.z, l.x, l.y, l.z - l.largo * (0.6 + intensidad)], i * 6);
+  constructor(escena) {
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: { uT: { value: 0 }, uInt: { value: 0 }, uAsp: { value: 1 }, uCol: { value: new THREE.Color(1, 1, 1) }, uBorde: { value: new THREE.Color(1, 1, 1) } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+      fragmentShader: `
+        uniform float uT, uInt, uAsp; uniform vec3 uCol, uBorde; varying vec2 vUv;
+        float h(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+        void main() {
+          vec2 p = (vUv - vec2(0.5, 0.56)) * vec2(uAsp, 1.0);
+          float r = length(p), a = atan(p.y, p.x) / 6.28318 + 0.5;
+          float N = 64.0, s = floor(a * N), f = fract(a * N);
+          float tk = floor(uT * 20.0), ft = fract(uT * 20.0);
+          float sh = h(s + tk * 13.7);
+          float hay = step(1.0 - uInt * 0.75, sh);
+          float ancho = 0.15 + 0.45 * h(s * 7.3 + tk);
+          float raya = 1.0 - smoothstep(ancho * 0.35, ancho * 0.5, abs(f - 0.5));
+          // cada raya arranca a distinta distancia del centro y en su vida corre hacia afuera
+          float r0 = 0.5 - 0.22 * uInt + 0.3 * h(s * 3.1 + tk * 1.7) + ft * 0.18;
+          float m = hay * raya * smoothstep(r0, r0 + 0.12, r);
+          // el borde de la pantalla se tiñe (blanco, naranja con turbo, arcoíris con estrella)
+          float borde = smoothstep(0.38, 1.0, r) * uInt;
+          vec3 c = mix(uBorde, uCol, m);
+          float alfa = clamp(m * 0.85 + borde * 0.32, 0.0, 0.9);
+          if (alfa < 0.01) discard;
+          gl_FragColor = vec4(c, alfa);
+        }`,
+      transparent: true, depthTest: false, depthWrite: false,
     });
-    this.geo.attributes.position.needsUpdate = true;
+    this.malla = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mat);
+    this.malla.frustumCulled = false;
+    this.malla.renderOrder = 999;
+    escena.add(this.malla);
+    this.int = 0;
+  }
+  // intensidad 0..1; color de las rayas y del borde
+  actualizar(dt, intensidad, color = 0xffffff, borde = color) {
+    this.int += (Math.min(1, intensidad) - this.int) * (1 - Math.exp(-(intensidad > this.int ? 10 : 4) * dt));
+    const u = this.mat.uniforms;
+    u.uInt.value = this.int; u.uT.value += dt; u.uAsp.value = innerWidth / innerHeight;
+    u.uCol.value.set(color); u.uBorde.value.set(borde);
+    this.malla.visible = this.int > 0.02;
   }
 }
 

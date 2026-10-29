@@ -38,7 +38,6 @@ escena.background = (() => {
 })();
 escena.fog = new THREE.Fog(0xcfe6ff, 160, 520);
 const camara = new THREE.PerspectiveCamera(70, 1, 0.4, 900);
-escena.add(camara); // la cámara lleva las líneas de velocidad
 escena.add(new THREE.HemisphereLight(0xdcefff, 0x4f7a3a, 1.1));
 const sol = new THREE.DirectionalLight(0xfff2d8, 2.4);
 sol.position.set(60, 120, 40);
@@ -47,7 +46,8 @@ sol.shadow.mapSize.set(2048, 2048);
 Object.assign(sol.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 10, far: 300 });
 escena.add(sol, sol.target);
 const particulas = new Particulas(escena);
-const lineas = new LineasVelocidad(camara);
+const lineas = new LineasVelocidad(escena);
+let zoomVel = 0; // desenfoque radial del filtro CRT
 const marcas = new Marcas(escena);
 // estética PS1 + tele CRT (se puede apagar con el botón 📺 o la tecla C)
 let retro = leer("kart_retro", "1") === "1";
@@ -354,7 +354,14 @@ function actualizarCarrera(dt) {
   particulas.actualizar(dt);
   const yk = yo.control;
   const velN = Math.abs(yk.vel) / AJUSTES.velMax;
-  lineas.actualizar(dt, yk.tTurbo > 0 ? 0.8 : Math.max(0, (velN - 0.88) * 3) + yo.rebufo * 0.35 + (yk.tEstrella > 0 ? 0.5 : 0), Math.abs(yk.vel));
+  // velocidad en pantalla: rayas anime + desenfoque radial; naranja con turbo, arcoíris con estrella, celeste con rebufo
+  let intV = Math.max(0, (velN - 0.8) * 2.5), colV = 0xffffff, bordeV = 0xffffff;
+  if (yo.rebufo > 0.15) { intV = Math.max(intV, 0.35 + yo.rebufo * 0.5); colV = 0xffffff; bordeV = 0xbfe6ff; }
+  if (yk.tTurbo > 0) { intV = 1; colV = 0xffe9a8; bordeV = 0xff8a1a; }
+  if (yk.tEstrella > 0) { intV = Math.max(intV, 0.85); const t = performance.now() / 400; colV = new THREE.Color().setHSL(t % 1, 1, 0.75); bordeV = new THREE.Color().setHSL((t + 0.3) % 1, 1, 0.55); }
+  if (!yk.enSuelo || antesGo) intV *= 0.5;
+  lineas.actualizar(dt, intV, colV, bordeV);
+  zoomVel += ((yk.tTurbo > 0 ? 1 : Math.max(0, velN - 0.75) * 2) - zoomVel) * (1 - Math.exp(-6 * dt));
   seguirCamara(dt);
   Sonido.motor(Math.abs(yk.vel) / (AJUSTES.velMax * AJUSTES.turbo), e.acel, yk.derrapando ? Math.max(1, yk.nivel) : 0, !yo.terminado || Math.abs(yk.vel) > 1);
   // ¿va al revés?
@@ -497,6 +504,9 @@ function seguirCamara(dt) {
   if (!C.camPos) C.camPos = camObj.clone();
   C.camPos.lerp(camObj, 1 - Math.exp(-(turbo ? 4.5 : 7) * dt));
   camara.position.copy(C.camPos);
+  // a fondo, la cámara vibra un poquito (como el motor al máximo)
+  const vib = (turbo ? 0.06 : Math.max(0, velN - 0.85) * 0.25);
+  camara.position.y += (Math.random() - 0.5) * vib;
   if (temblor > 0) { camara.position.x += (Math.random() - 0.5) * temblor; camara.position.y += (Math.random() - 0.5) * temblor; temblor = Math.max(0, temblor - dt * 2); }
   camMira.copy(g).addScaledVector(f, 4).y += 1.3;
   camara.lookAt(camMira);
@@ -640,7 +650,10 @@ let avisoT = 0;
 function aviso(texto, fijo = false) {
   const a = $("#aviso");
   if (!a) return;
-  if (texto) { a.textContent = texto; a.classList.add("on"); if (!fijo) { avisoT = Date.now() + 1500; } }
+  if (texto) {
+    if (!fijo || a.textContent !== texto || !a.classList.contains("on")) { a.classList.remove("on"); void a.offsetWidth; }
+    a.textContent = texto; a.classList.add("on"); if (!fijo) avisoT = Date.now() + 1500;
+  }
   else if (Date.now() > avisoT) a.classList.remove("on");
 }
 function avisoGrande(texto, clase = "") {
@@ -703,7 +716,8 @@ function vistaFondo(dt) {
   sol.position.set(a.x + 60, 120, a.z + 40); sol.target.position.copy(a);
   for (const r of remotos.values()) animarModelo(r.mod, dt, {});
   items?.actualizar(dt, [], [], () => {});
-  lineas.actualizar(dt, 0, 0);
+  lineas.actualizar(dt, 0);
+  zoomVel = 0;
 }
 
 function pantallaInicio() {
@@ -838,7 +852,7 @@ function bucle() {
   if (pausaImpacto > 0) pausaImpacto -= dt; // golpe fuerte: un instante congelado
   else if (C) actualizarCarrera(dt);
   else vistaFondo(dt);
-  if (retro) crt.dibujar(escena, camara, performance.now() / 1000);
+  if (retro) crt.dibujar(escena, camara, performance.now() / 1000, zoomVel);
   else render.render(escena, camara);
 }
 

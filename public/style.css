@@ -101,3 +101,22 @@ input:focus { border-color: var(--amarillo); }
 .btn-chico.crt.on { background: #ffd23f; color: #14213d; }
 .hud .crt { right: 64px; top: 92px; pointer-events: auto; margin: 0; }
 @media (pointer: coarse) { .hud .crt { top: 128px; right: 12px; } }
+
+/* ítem, monedas, posición que sube */
+.hud-item { left: 176px; top: max(12px, env(safe-area-inset-top)); text-align: center; }
+.ranura { width: 84px; height: 84px; display: grid; place-items: center; font-size: 50px; line-height: 1; border: 4px solid #fff; border-radius: 16px;
+  background: radial-gradient(circle at 40% 30%, #ffffff40, #00000080); box-shadow: 0 5px 0 #000a, inset 0 0 0 3px #000; }
+.ranura.girando { animation: ruleta .14s infinite alternate; border-color: var(--amarillo); }
+.ranura.llena { border-color: var(--amarillo); }
+.ranura.pop { animation: pop .35s cubic-bezier(.3, 1.8, .5, 1); }
+@keyframes ruleta { to { transform: scale(1.07) rotate(3deg); } }
+@keyframes pop { from { transform: scale(1.6); } }
+.hud-item small { display: block; font: 400 20px var(--f-tit); text-shadow: 0 3px 0 #000; }
+.hud-monedas { left: 14px; top: calc(max(12px, env(safe-area-inset-top)) + 160px); font: 400 30px var(--f-tit); color: var(--amarillo); text-shadow: 0 3px 0 #000, 2px 0 0 #000, -2px 0 0 #000; }
+.hud-pos b.sube { animation: pop .4s cubic-bezier(.3, 1.8, .5, 1); display: inline-block; }
+.btn-t.item { right: 140px; bottom: 190px; width: 76px; height: 76px; background: radial-gradient(circle at 40% 35%, #ffe680, #d99a00); font-size: 15px; opacity: .7; }
+.btn-t.item.listo { opacity: 1; font-size: 36px; }
+@media (pointer: coarse) {
+  .hud-item { left: 14px; top: calc(max(12px, env(safe-area-inset-top)) + 112px); } .ranura { width: 62px; height: 62px; font-size: 36px; border-width: 3px; }
+  .hud-monedas { top: calc(max(12px, env(safe-area-inset-top)) + 184px); font-size: 22px; }
+}

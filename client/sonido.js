@@ -63,6 +63,18 @@ export const Sonido = {
   vuelta() { [523, 659, 784].forEach((f, i) => tono(f, 0.25, "triangle", 0.12, 1, i * 0.1)); },
   meta() { [523, 659, 784, 1046, 1318].forEach((f, i) => tono(f, 0.4, "triangle", 0.12, 1, i * 0.12)); },
   error() { tono(160, 0.2, "square", 0.08); },
+  caja() { [660, 880, 1100].forEach((f, i) => tono(f, 0.12, "square", 0.05, 1, i * 0.04)); ruido(0.2, 0.08, 4000, "highpass"); },
+  ruleta() { tono(900 + Math.random() * 500, 0.04, "square", 0.035); },
+  item() { tono(1046, 0.15, "triangle", 0.1); tono(1568, 0.22, "triangle", 0.08, 1, 0.08); },
+  moneda(delay = 0) { tono(988, 0.07, "square", 0.06, 1, delay); tono(1319, 0.25, "square", 0.06, 1, delay + 0.07); },
+  tirar() { ruido(0.18, 0.15, 2000); tono(500, 0.15, "triangle", 0.06, 0.6); },
+  golpe() { ruido(0.3, 0.3, 1500); [700, 550, 420, 330].forEach((f, i) => tono(f, 0.12, "square", 0.06, 1, i * 0.09)); },
+  rebote() { tono(260, 0.08, "triangle", 0.06, 1.4); },
+  truco() { tono(700, 0.12, "triangle", 0.08, 1.5); tono(1050, 0.12, "triangle", 0.06, 1.5, 0.08); },
+  aterriza() { ruido(0.15, 0.2, 500); tono(90, 0.15, "sine", 0.25, 0.6); },
+  rebufo() { ruido(0.5, 0.12, 3000, "highpass"); },
+  adelanto() { tono(784, 0.1, "triangle", 0.07); tono(1046, 0.16, "triangle", 0.07, 1, 0.09); },
+  estrella() { const n = [523, 659, 784, 1046, 784, 659]; for (let k = 0; k < 24; k++) tono(n[k % 6] * (k % 12 < 6 ? 1 : 1.12), 0.12, "square", 0.04, 1, k * 0.28); },
   clic() { tono(1200, 0.04, "square", 0.04); },
 };
 addEventListener("pointerdown", () => Sonido.despertar(), { once: true });

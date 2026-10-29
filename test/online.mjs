@@ -25,7 +25,7 @@ const visto = await c.evaluate(() => { const r = [...window.__kart.remotos.value
 await c.screenshot({ path: "/tmp/claude-0/-home-claude/7ef66f04-94ad-5331-afbb-f831b821f135/scratchpad/o_movil.png" });
 await a.screenshot({ path: "/tmp/claude-0/-home-claude/7ef66f04-94ad-5331-afbb-f831b821f135/scratchpad/o_pc.png" });
 // los dos terminan a la fuerza para ver resultados
-for (const p of [a, c]) await p.evaluate(() => { const C = window.__kart.C; C.p = C.vueltas * 700 - 1; window.__kart.entrada({ acel: true }); });
+for (const p of [a, c]) await p.evaluate(() => { const C = window.__kart.C; C.yo.p = C.vueltas * 700 - 1; window.__kart.entrada({ acel: true }); });
 await a.waitForTimeout(6000);
 const res = await a.$$eval(".resultados tr", (l) => l.map((x) => x.textContent.trim().replace(/\s+/g, " ")));
 await a.screenshot({ path: "/tmp/claude-0/-home-claude/7ef66f04-94ad-5331-afbb-f831b821f135/scratchpad/o_res.png" });

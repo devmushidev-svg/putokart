@@ -6,7 +6,7 @@ await p.goto("http://127.0.0.1:8790/solo");
 await p.waitForFunction(() => window.__kart?.C, null, { timeout: 30000 });
 await p.waitForTimeout(4000);
 await p.evaluate(() => {
-  const K = window.__kart, k = K.C.control, R = K.recorrido;
+  const K = window.__kart, k = K.C.yo.control, R = K.recorrido;
   const seguir = (n, extra = {}) => { for (let i = 0; i < n; i++) { const o = R.p[(K.C.idx + 14) % R.n], q = k.pos; let d = Math.atan2(o.x - q.x, o.z - q.z) - k.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); K.entrada({ acel: true, giro: Math.max(-1, Math.min(1, -d * 3)), ...extra }); K.avanzar(1 / 60); } };
   seguir(330);
   K.entrada({ acel: true, giro: 1, derrape: true }); K.avanzar(0.1);

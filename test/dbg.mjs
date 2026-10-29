@@ -5,7 +5,7 @@ await p.goto("http://127.0.0.1:8790/solo");
 await p.waitForFunction(() => window.__kart?.C, null, { timeout: 30000 });
 await p.waitForTimeout(4000);
 const r = await p.evaluate(() => {
-  const K = window.__kart, k = K.C.control, out = [];
+  const K = window.__kart, k = K.C.yo.control, out = [];
   const R = K.recorrido;
   K.entrada({ acel: true });
   for (let i = 0; i < 10; i++) {

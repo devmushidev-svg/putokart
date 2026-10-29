@@ -166,6 +166,38 @@ export function pistaPrueba() {
   }
   decorar(grupo, puntos, lim + 6);
 
+  // ---------- cosas al borde de la pista: pasan volando y se siente la velocidad ----------
+  const curv = puntos.map((_, i) => {
+    const a = puntos[(i - 10 + N) % N], b = puntos[i], c = puntos[(i + 10) % N];
+    const d1 = Math.atan2(b.x - a.x, b.z - a.z), d2 = Math.atan2(c.x - b.x, c.z - b.z);
+    return Math.atan2(Math.sin(d2 - d1), Math.cos(d2 - d1)); // + = dobla a la izquierda
+  });
+  bordes(grupo, puntos, derechas, curv, lim, h + borde);
+  tribuna(grupo, puntos, derechas, lim);
+
+  // ---------- rampas (en las rectas): saltás y con un truco en el aire ganás turbo ----------
+  const rampas = [];
+  const mR = new THREE.MeshStandardMaterial({ map: texRampa(), roughness: 0.7 });
+  for (const f of [0.42, 0.76]) {
+    let i = Math.floor(f * N), mejor = i;
+    for (let k = -25; k <= 25; k++) if (Math.abs(curv[(i + k + N) % N]) < Math.abs(curv[mejor])) mejor = (i + k + N) % N;
+    agregar(rampa(puntos, derechas, mejor, 6, 1.7, h), mR, "suelo").castShadow = true;
+    rampas.push(mejor);
+  }
+
+  // cajas de ítems: filas de 4 a lo ancho; monedas: hileras de 5
+  const cajas = [], monedas = [];
+  for (const f of [0.28, 0.6, 0.93]) {
+    const i = Math.floor(f * N);
+    for (const l of [-5.25, -1.75, 1.75, 5.25]) cajas.push({ pos: puntos[i].clone().addScaledVector(derechas[i], l).add(new THREE.Vector3(0, 1.2, 0)) });
+  }
+  for (const [f, l] of [[0.06, -3.5], [0.2, 3.5], [0.52, 0], [0.68, -4], [0.86, 4]]) {
+    for (let k = 0; k < 5; k++) {
+      const i = (Math.floor(f * N) + k * 4) % N;
+      monedas.push({ pos: puntos[i].clone().addScaledVector(derechas[i], l).add(new THREE.Vector3(0, 0.9, 0)) });
+    }
+  }
+
   // salidas: 8 lugares en dos columnas detrás de la meta
   const salidas = [];
   for (let k = 0; k < 8; k++) {
@@ -175,8 +207,122 @@ export function pistaPrueba() {
     const t = puntos[(i + 1) % N].clone().sub(puntos[i]);
     salidas.push({ pos, yaw: Math.atan2(t.x, t.z) });
   }
-  return { nombre: "Circuito de Prueba", grupo, colisiones, salidas, camino: puntos, turbos, ancho };
+  return { nombre: "Circuito de Prueba", grupo, colisiones, salidas, camino: puntos, turbos, ancho, cajas, monedas, rampas };
 }
+
+// rampa: cuña a lo ancho de la pista que sube "alto" metros en "largo" puntos del recorrido
+function rampa(puntos, derechas, i0, largo, alto, h) {
+  const n = puntos.length, verts = [], idx = [], uvs = [];
+  const v = (p, u, w) => { verts.push(p.x, p.y, p.z); uvs.push(u, w); return verts.length / 3 - 1; };
+  const filas = [];
+  for (let k = 0; k <= largo; k++) {
+    const i = (i0 + k) % n, y = (k / largo) ** 1.4 * alto + 0.02;
+    const a = puntos[i].clone().addScaledVector(derechas[i], -h).add(new THREE.Vector3(0, y, 0));
+    const b = puntos[i].clone().addScaledVector(derechas[i], h).add(new THREE.Vector3(0, y, 0));
+    filas.push([v(a, 0, k / largo), v(b, 1, k / largo), i]);
+  }
+  for (let k = 1; k < filas.length; k++) { const [a0, b0] = filas[k - 1], [a1, b1] = filas[k]; idx.push(a0, b0, a1, b0, b1, a1); }
+  // frente vertical (donde termina la rampa)
+  const [af, bf, i] = filas[filas.length - 1];
+  const ab = v(puntos[i].clone().addScaledVector(derechas[i], -h), 0, 0), bb = v(puntos[i].clone().addScaledVector(derechas[i], h), 1, 0);
+  idx.push(af, ab, bf, bf, ab, bb);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// conos en las curvas, carteles con flechas del lado de afuera, postes de luz, pilas de llantas
+function bordes(grupo, puntos, derechas, curv, lim, bordePista) {
+  const n = puntos.length;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1);
+  const yaw = (i) => Math.atan2(puntos[(i + 1) % n].x - puntos[i].x, puntos[(i + 1) % n].z - puntos[i].z);
+  const instanciar = (geo, mat, lista) => {
+    if (!lista.length) return;
+    const im = new THREE.InstancedMesh(geo, mat, lista.length);
+    lista.forEach(([pos, ang], k) => { m.compose(pos, q.setFromAxisAngle(ARRIBA, ang), s); im.setMatrixAt(k, m); });
+    im.castShadow = true;
+    grupo.add(im);
+  };
+  // postes de luz a los dos lados, cada ~15 m, con el brazo hacia la pista
+  const postes = [];
+  for (let i = 0; i < n; i += 10) for (const l of [-1, 1]) {
+    const pos = puntos[i].clone().addScaledVector(derechas[i], l * (lim + 1.2));
+    const hacia = puntos[i].clone().sub(pos);
+    postes.push([pos, Math.atan2(hacia.x, hacia.z)]);
+  }
+  const mGris = new THREE.MeshStandardMaterial({ color: 0x8a9099, roughness: 0.5, metalness: 0.4 });
+  instanciar(new THREE.CylinderGeometry(0.12, 0.16, 7, 6).translate(0, 3.5, 0), mGris, postes);
+  instanciar(new THREE.BoxGeometry(0.15, 0.15, 2.2).translate(0, 7, 0.9), mGris, postes);
+  instanciar(new THREE.BoxGeometry(0.5, 0.18, 0.7).translate(0, 6.92, 1.9), new THREE.MeshBasicMaterial({ color: 0xfff6c8 }), postes);
+  // conos del lado de adentro de las curvas cerradas y carteles de flechas del lado de afuera
+  const conos = [], carteles = { "-1": [], "1": [] }, llantas = [];
+  for (let i = 0; i < n; i += 6) {
+    const c = curv[i];
+    if (Math.abs(c) < 0.32) continue;
+    const adentro = c > 0 ? -1 : 1;
+    conos.push([puntos[i].clone().addScaledVector(derechas[i], adentro * (bordePista + 1.2)), Math.random() * 6]);
+    if (i % 12 === 0) {
+      const pos = puntos[i].clone().addScaledVector(derechas[i], -adentro * (lim - 0.3)).add(new THREE.Vector3(0, 1.2, 0));
+      carteles[adentro].push([pos, yaw(i) + Math.PI]);
+    }
+    if (i % 24 === 0) llantas.push([puntos[i].clone().addScaledVector(derechas[i], -adentro * (lim - 1.4)), Math.random() * 6]);
+  }
+  instanciar(new THREE.ConeGeometry(0.32, 0.85, 8).translate(0, 0.42, 0), new THREE.MeshStandardMaterial({ color: 0xff6a00, roughness: 0.6 }), conos);
+  instanciar(new THREE.BoxGeometry(0.75, 0.08, 0.75).translate(0, 0.04, 0), new THREE.MeshStandardMaterial({ color: 0xff6a00 }), conos);
+  for (const lado of [-1, 1]) instanciar(new THREE.PlaneGeometry(3.2, 1.3), new THREE.MeshBasicMaterial({ map: texFlechas(lado), side: THREE.DoubleSide }), carteles[lado]);
+  const pilas = llantas.flatMap(([pos, a]) => [0, 1, 2].map((k) => [pos.clone().add(new THREE.Vector3(0, 0.22 + k * 0.42, 0)), a + k]));
+  instanciar(new THREE.TorusGeometry(0.5, 0.22, 6, 12).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1b1b1f, roughness: 0.9 }), pilas);
+}
+
+// tribunas con público a los dos lados de la recta de largada
+function tribuna(grupo, puntos, derechas, lim) {
+  const n = puntos.length, t = textura(256, 128, (g, w, h) => {
+    g.fillStyle = "#2b2f3a"; g.fillRect(0, 0, w, h);
+    const cols = ["#e63946", "#f4c430", "#2a9df4", "#2ec27e", "#ffffff", "#ff8c1a", "#a05cf0", "#ffd1a8"];
+    for (let y = 6; y < h; y += 14) for (let x = 4; x < w; x += 9) {
+      g.fillStyle = cols[(Math.random() * cols.length) | 0]; g.fillRect(x, y, 6, 7);
+      g.fillStyle = "#f2c9a0"; g.fillRect(x + 1, y - 4, 4, 4);
+    }
+  });
+  t.repeat.set(4, 1);
+  const mGente = new THREE.MeshStandardMaterial({ map: t }), mGris = new THREE.MeshStandardMaterial({ color: 0x5a606e });
+  for (const lado of [1, -1]) {
+    const g = new THREE.Group(), i = (n - 22) % n;
+    for (let k = 0; k < 5; k++) {
+      const esc = new THREE.Mesh(new THREE.BoxGeometry(48, 1.1, 2), [mGris, mGris, mGris, mGris, mGente, mGente]);
+      esc.position.set(0, 0.55 + k * 1.1, k * 2);
+      esc.castShadow = esc.receiveShadow = true;
+      g.add(esc);
+    }
+    const techo = new THREE.Mesh(new THREE.BoxGeometry(50, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0xd62828 }));
+    techo.position.set(0, 8.5, 4); g.add(techo);
+    const pos = puntos[i].clone().addScaledVector(derechas[i], lado * (lim + 5));
+    g.position.set(pos.x, pos.y - 0.2, pos.z);
+    // que la gente mire hacia la pista
+    const hacia = puntos[i].clone().sub(pos);
+    g.rotation.y = Math.atan2(-hacia.x, -hacia.z);
+    grupo.add(g);
+  }
+}
+const texRampa = () => textura(128, 128, (g, w, h) => {
+  g.fillStyle = "#ffd23f"; g.fillRect(0, 0, w, h);
+  g.fillStyle = "#111";
+  for (let k = -2; k < 6; k++) { g.beginPath(); g.moveTo(k * 32, 0); g.lineTo(k * 32 + 16, 0); g.lineTo(k * 32 + 48, h); g.lineTo(k * 32 + 32, h); g.fill(); }
+});
+const texFlechas = (lado) => textura(256, 104, (g, w, h) => {
+  g.fillStyle = "#14213d"; g.fillRect(0, 0, w, h);
+  g.fillStyle = "#ffd23f";
+  for (let k = 0; k < 3; k++) {
+    const x0 = 30 + k * 70;
+    g.beginPath();
+    if (lado > 0) { g.moveTo(x0, 12); g.lineTo(x0 + 40, h / 2); g.lineTo(x0, h - 12); g.lineTo(x0 + 18, h - 12); g.lineTo(x0 + 58, h / 2); g.lineTo(x0 + 18, 12); }
+    else { g.moveTo(x0 + 58, 12); g.lineTo(x0 + 18, h / 2); g.lineTo(x0 + 58, h - 12); g.lineTo(x0 + 40, h - 12); g.lineTo(x0, h / 2); g.lineTo(x0 + 40, 12); }
+    g.fill();
+  }
+}, false);
 
 function muro(puntos, derechas, lateral, alto, base = 0) {
   const verts = [], idx = [], uvs = [];
@@ -250,7 +396,7 @@ export async function pistaGLB(url) {
   const gltf = await new GLTFLoader().loadAsync(url);
   const escena = gltf.scene;
   escena.updateMatrixWorld(true);
-  const colisiones = [], salidas = [], cps = [], turbos = [];
+  const colisiones = [], salidas = [], cps = [], turbos = [], cajasG = [], monedasG = [];
   const ocultar = [];
   escena.traverse((o) => {
     const n = (o.name || "").toLowerCase();
@@ -264,6 +410,10 @@ export async function pistaGLB(url) {
       salidas.push({ n: parseInt(n.replace(/\D/g, "")) || 0, pos: pos.add(new THREE.Vector3(0, 1, 0)), yaw: Math.atan2(dir.x, dir.z) });
     } else if (n.startsWith("checkpoint")) {
       cps.push({ n: parseInt(n.replace(/\D/g, "")) || 0, pos: new THREE.Vector3().setFromMatrixPosition(o.matrixWorld) });
+    } else if (n.startsWith("caja")) {
+      cajasG.push({ pos: new THREE.Vector3().setFromMatrixPosition(o.matrixWorld) }); ocultar.push(o);
+    } else if (n.startsWith("moneda")) {
+      monedasG.push({ pos: new THREE.Vector3().setFromMatrixPosition(o.matrixWorld) }); ocultar.push(o);
     } else if (n.startsWith("turbo")) {
       turbos.push({ pos: new THREE.Vector3().setFromMatrixPosition(o.matrixWorld), r: 2.6 });
     } else if (o.isMesh) { o.castShadow = o.receiveShadow = true; }
@@ -279,7 +429,7 @@ export async function pistaGLB(url) {
     const a = cps[i].pos, b = cps[(i + 1) % cps.length].pos, pasos = Math.max(2, Math.round(a.distanceTo(b) / 1.5));
     for (let k = 0; k < pasos; k++) camino.push(a.clone().lerp(b, k / pasos));
   }
-  return { nombre: url.split("/").pop().replace(".glb", ""), grupo: escena, colisiones, salidas, camino, turbos, ancho: 16 };
+  return { nombre: url.split("/").pop().replace(".glb", ""), grupo: escena, colisiones, salidas, camino, turbos, ancho: 16, cajas: cajasG, monedas: monedasG, rampas: [] };
 }
 
 // ---------- recorrido: en qué parte de la pista está un punto ----------

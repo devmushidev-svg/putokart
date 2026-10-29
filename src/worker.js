@@ -75,7 +75,7 @@ export class Sala {
     const yo = ws.deserializeAttachment()?.id;
 
     // posiciones: se reenvían tal cual (no se guardan), es lo más frecuente
-    if (m.t === "pos") {
+    if (m.t === "pos" || m.t === "ev") { // ev = plátanos, golpes, etc.
       if (!yo) return;
       m.id = yo;
       this.difundir(m, ws);

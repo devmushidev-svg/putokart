@@ -27,6 +27,9 @@ export const AJUSTES = {
   nivelesDerrape: [0.7, 1.45, 2.3], // segundos de carga para cada nivel (azul, naranja, violeta)
   turboDerrape: [0.7, 1.1, 1.6], // duración del turbo según el nivel
   radio: 0.6,
+  bonoMoneda: 0.012, // +1,2 % de velocidad máxima por moneda (máximo 10)
+  velEstrella: 1.18,
+  turboTruco: 0.9, // turbo al caer de un truco
 };
 const COLOR_NIVEL = [null, 0x3fa9ff, 0xff8a1f, 0xc64bff];
 const ARRIBA = new THREE.Vector3(0, 1, 0);
@@ -91,7 +94,7 @@ export function crearModelo(color, nombre) {
   const fuego2 = fuego.clone(); fuego.position.set(0.35, 0.65, -1.85); fuego2.position.set(-0.35, 0.65, -1.85);
   fuego.visible = fuego2.visible = false;
   cuerpo.add(fuego, fuego2);
-  return { g, cuerpo, ruedas, etiqueta, chispas, fuegos: [fuego, fuego2], piloto };
+  return { g, cuerpo, ruedas, etiqueta, chispas, fuegos: [fuego, fuego2], piloto, mats: [mColor, mNegro] };
 }
 
 function modeloDesdePlantilla(color, nombre) {
@@ -124,7 +127,9 @@ function modeloDesdePlantilla(color, nombre) {
   const fuego = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.1, 8).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.85 }));
   fuego.position.set(0, 0.6, caja.min.z - 0.4); fuego.visible = false;
   cuerpo.add(fuego);
-  return { g, cuerpo, ruedas, etiqueta, chispas, fuegos: [fuego], piloto };
+  const mats = [];
+  m.traverse((o) => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((mt) => mt.emissive && mats.push(mt)); });
+  return { g, cuerpo, ruedas, etiqueta, chispas, fuegos: [fuego], piloto, mats };
 }
 
 function etiquetaNombre(nombre, color) {
@@ -176,7 +181,13 @@ function crearChispas() {
 }
 
 // anima ruedas, chispas y fuego (sirve para el kart propio y los de los demás)
-export function animarModelo(mod, dt, { vel = 0, giro = 0, derrape = 0, dirDerrape = 0, turbo = false, inclinacion = 0 }) {
+export function animarModelo(mod, dt, { vel = 0, giro = 0, derrape = 0, dirDerrape = 0, turbo = false, estrella = false }) {
+  // estrella: el kart titila con todos los colores
+  if (estrella || mod.estrellaAntes) {
+    const c = estrella ? new THREE.Color().setHSL((performance.now() / 300) % 1, 1, 0.5) : new THREE.Color(0);
+    for (const m of mod.mats || []) m.emissive?.copy(c);
+    mod.estrellaAntes = estrella;
+  }
   for (const w of mod.ruedas) {
     if (w.pivote === w.r) { // rueda de Blender: girar y doblar sobre su propia rotación
       w.base ||= w.r.rotation.clone();
@@ -222,19 +233,31 @@ export class Control {
     this.giroVisual = 0;
     this.velAng = 0; // velocidad de giro actual (se suaviza para que no sea instantáneo)
     this.botonAntes = false; this.tBoton = 9; // para detectar el toque del botón de derrape
+    this.tGolpe = 0; this.durGolpe = 1; // girando sin control después de un golpe (plátano, caparazón)
+    this.tEstrella = 0; // invencible y más rápido
+    this.monedas = 0;
+    this.tAire = 0; this.truco = false; this.tTruco = 0; // truco en el aire (rampas): turbo al caer
+    this.aplasta = 0; // aplastar/estirar el modelo (al caer y al arrancar un turbo)
     this.choque = 0;
   }
   get pos() { const t = this.cuerpo.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
   adelante() { return new THREE.Vector3(Math.sin(this.rumbo), 0, Math.cos(this.rumbo)); } // hacia dónde se mueve
   nariz() { return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)); } // hacia dónde apunta
 
-  turbo(seg) { this.tTurbo = Math.max(this.tTurbo, seg); }
+  turbo(seg) { if (this.tTurbo <= 0) this.aplasta = -0.14; this.tTurbo = Math.max(this.tTurbo, seg); }
+  // golpe de un ítem: gira sin control y casi se frena. Con estrella no pasa nada.
+  golpe(seg = 1.1) {
+    if (this.tEstrella > 0 || this.tGolpe > 0) return false;
+    this.tGolpe = this.durGolpe = seg;
+    this.derrapando = false; this.dirDerrape = 0; this.nivel = 0; this.tTurbo = 0; this.truco = false;
+    return true;
+  }
 
   colocar(pos, yaw) {
     this.cuerpo.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true);
     this.cuerpo.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.yaw = this.rumbo = yaw; this.deriva = 0; this.vel = 0; this.dirVel.set(Math.sin(yaw), 0, Math.cos(yaw));
-    this.derrapando = false; this.nivel = 0; this.tTurbo = 0;
+    this.derrapando = false; this.nivel = 0; this.tTurbo = 0; this.tGolpe = 0;
   }
 
   // entrada: { acel, freno, giro (-1..1, + = derecha), derrape (mantener) }
@@ -251,9 +274,28 @@ export class Control {
       this.normal.lerp(new THREE.Vector3(n.x, n.y, n.z), 1 - Math.exp(-12 * dt)).normalize();
     } else this.normal.lerp(ARRIBA, 1 - Math.exp(-3 * dt));
 
-    const fuera = this.enSuelo && this.tipoSuelo === "fuera";
+    // aire: truco y aterrizaje
+    if (!this.enSuelo) this.tAire += dt;
+    else {
+      if (this.tAire > 0.3) { eventos.push("aterriza"); this.aplasta = Math.min(0.32, this.tAire * 0.35); }
+      if (this.truco) { this.truco = false; this.turbo(A.turboTruco); eventos.push("turbo"); }
+      this.tAire = 0;
+    }
+    if (this.tTruco > 0) this.tTruco -= dt;
+    this.aplasta *= Math.exp(-7 * dt);
+    if (this.tEstrella > 0) this.tEstrella -= dt;
+    // golpeado: sin control, gira y se frena
+    if (this.tGolpe > 0) {
+      this.tGolpe -= dt;
+      e = { giro: 0, acel: false, freno: false, derrape: false };
+      this.vel *= Math.exp(-2.8 * dt);
+    }
+
+    const estrella = this.tEstrella > 0;
+    const fuera = this.enSuelo && this.tipoSuelo === "fuera" && !estrella;
     const turbo = this.tTurbo > 0;
     let max = turbo ? A.velMax * A.turbo : fuera ? A.velFuera : A.velMax;
+    max *= (1 + A.bonoMoneda * Math.min(10, this.monedas)) * (estrella ? A.velEstrella : 1);
     if (turbo) this.tTurbo -= dt;
 
     // velocidad
@@ -273,6 +315,8 @@ export class Control {
     this.botonAntes = !!e.derrape;
     this.tBoton = e.derrape ? (toque ? 0 : this.tBoton + dt) : 9;
     if (toque && this.enSuelo && !this.derrapando) { this.salto = 0.32; eventos.push("salto"); }
+    // truco: tocar el botón en el aire (al salir de una rampa) → al caer, turbo
+    if (toque && !this.enSuelo && this.tAire > 0.08 && !this.truco && this.tGolpe <= 0) { this.truco = true; this.tTruco = 0.45; eventos.push("truco"); }
     if (e.derrape && !this.derrapando && this.tBoton < 0.45 && Math.abs(giro) > 0.3 && this.vel > A.velMax * A.velMinDerrape && !fuera) {
       this.derrapando = true; this.dirDerrape = Math.sign(giro); this.tDerrape = 0; this.nivel = 0;
     }
@@ -344,10 +388,17 @@ export class Control {
   aplicarModelo(mod) {
     const p = this.pos;
     mod.g.position.set(p.x, p.y - AJUSTES.radio + Math.sin(this.salto * Math.PI / 0.35) * 0.35 * (this.salto > 0 ? 1 : 0), p.z);
-    const f = this.nariz();
+    // golpeado: da una vuelta y media sobre sí mismo
+    const giroGolpe = this.tGolpe > 0 ? (1 - this.tGolpe / this.durGolpe) * Math.PI * 3 : 0;
+    const yawV = this.yaw + giroGolpe;
+    const f = new THREE.Vector3(Math.sin(yawV), 0, Math.cos(yawV));
+    // truco: vuelta de frente en el aire; aplastar/estirar
+    mod.cuerpo.rotation.x = this.tTruco > 0 ? -(1 - this.tTruco / 0.45) * Math.PI * 2 : 0;
+    mod.cuerpo.scale.set(1 + this.aplasta * 0.6, 1 - this.aplasta, 1 + this.aplasta * 0.6);
     const derecha = new THREE.Vector3().crossVectors(f, this.normal).normalize();
     const fn = new THREE.Vector3().crossVectors(this.normal, derecha).normalize();
     const m = new THREE.Matrix4().makeBasis(derecha.negate(), this.normal, fn);
-    mod.g.quaternion.slerp(new THREE.Quaternion().setFromRotationMatrix(m), 0.35);
+    if (this.tGolpe > 0) mod.g.quaternion.setFromRotationMatrix(m);
+    else mod.g.quaternion.slerp(new THREE.Quaternion().setFromRotationMatrix(m), 0.35);
   }
 }

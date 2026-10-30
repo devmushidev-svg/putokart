@@ -12,7 +12,7 @@ await p.evaluate(() => window.__kart.entrada({ acel: true }));
 await p.waitForTimeout(3500);
 await p.screenshot({ path: S + "v1.png" });
 await p.evaluate(() => window.__kart.C.yo.control.turbo(3));
-await p.waitForTimeout(150);
+await p.waitForTimeout(400);
 await p.screenshot({ path: S + "v2.png" });
 await p.waitForTimeout(1500);
 await p.screenshot({ path: S + "v3.png" });

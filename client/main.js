@@ -6,7 +6,7 @@ import { crearModelo, animarModelo, Control, AJUSTES, usarPlantilla } from "./ka
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Sonido } from "./sonido.js";
 import { FiltroCRT, objetoRetro, uniformes } from "./retro.js";
-import { Particulas, LineasVelocidad, Marcas } from "./efectos.js";
+import { Particulas, LineasVelocidad, Marcas, Viento } from "./efectos.js";
 import { Items, ICONOS, CANTIDAD } from "./items.js";
 import { Bot } from "./ia.js";
 
@@ -47,6 +47,7 @@ Object.assign(sol.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, n
 escena.add(sol, sol.target);
 const particulas = new Particulas(escena);
 const lineas = new LineasVelocidad(escena);
+const viento = new Viento(escena);
 let zoomVel = 0; // desenfoque radial del filtro CRT
 const marcas = new Marcas(escena);
 // estética PS1 + tele CRT (se puede apagar con el botón 📺 o la tecla C)
@@ -354,18 +355,23 @@ function actualizarCarrera(dt) {
   particulas.actualizar(dt);
   const yk = yo.control;
   const velN = Math.abs(yk.vel) / AJUSTES.velMax;
-  // velocidad en pantalla: rayas anime + desenfoque radial; naranja con turbo, arcoíris con estrella, celeste con rebufo
-  // El turbo pasa casi todo el tiempo (derrapes, flechas, rebufo), así que no se marca entero:
-  // solo un golpe corto de rayas cuando arranca, que se apaga en medio segundo. Fijo, solo con la estrella.
-  if (yk.tTurbo > 0 && !C.turboAntes) C.pulso = Math.min(1, 0.45 + yk.tTurbo * 0.25);
+  // Sensación de velocidad según CUÁNTO más rápido vas que lo normal, no según si hay turbo:
+  //  - a velocidad normal no hay nada; un mini-turbo azul se nota poco y un hongo o turbo violeta mucho,
+  //    y todo se va apagando solo a medida que el kart vuelve a su velocidad.
+  //  - viento en el mundo (pasa a tu velocidad real) + rayas finas en el borde de la pantalla
+  //  - un "golpe" corto al arrancar cada turbo, más fuerte cuanto más largo es el turbo
+  const exceso = THREE.MathUtils.clamp((Math.abs(yk.vel) - AJUSTES.velMax) / (AJUSTES.velMax * (AJUSTES.turbo - 1)), 0, 1);
+  if (yk.tTurbo > 0 && !C.turboAntes) C.pulso = THREE.MathUtils.clamp(yk.tTurbo / 1.6, 0.35, 1);
   C.turboAntes = yk.tTurbo > 0;
-  C.pulso = (C.pulso || 0) * Math.exp(-3.5 * dt);
-  let intV = C.pulso * 0.55, colV = 0xffffff, bordeV = 0xffffff;
-  if (yk.tTurbo > 0) colV = 0xffe9a8;
-  if (yk.tEstrella > 0) { intV = Math.max(intV, 0.4); const t = performance.now() / 400; colV = new THREE.Color().setHSL(t % 1, 1, 0.75); bordeV = new THREE.Color().setHSL((t + 0.3) % 1, 1, 0.55); }
-  if (!yk.enSuelo || antesGo) intV *= 0.5;
-  lineas.actualizar(dt, Math.min(0.55, intV), colV, bordeV);
-  zoomVel += (C.pulso * 0.35 - zoomVel) * (1 - Math.exp(-8 * dt));
+  C.pulso = (C.pulso || 0) * Math.exp(-4 * dt);
+  let colV = yk.tTurbo > 0 ? 0xffe9a8 : 0xffffff, bordeV = 0xffffff;
+  let fuerza = Math.max(exceso * 0.75, C.pulso);
+  if (yk.tEstrella > 0) { fuerza = Math.max(fuerza, 0.5); const t = performance.now() / 400; colV = new THREE.Color().setHSL(t % 1, 1, 0.75); bordeV = new THREE.Color().setHSL((t + 0.3) % 1, 1, 0.55); }
+  if (antesGo) fuerza = 0;
+  lineas.actualizar(dt, fuerza * 0.4, colV, bordeV);
+  viento.actualizar(dt, yk.pos, yk.adelante(), yk.vel, Math.max(fuerza, yo.rebufo > 0.2 ? 0.5 : 0, Math.max(0, velN - 0.9) * 2), yo.rebufo > 0.2 ? 0xcfeeff : colV, camara.position);
+  zoomVel += (fuerza * 0.4 - zoomVel) * (1 - Math.exp(-8 * dt));
+  C.fuerzaVel = fuerza;
   seguirCamara(dt);
   Sonido.motor(Math.abs(yk.vel) / (AJUSTES.velMax * AJUSTES.turbo), e.acel, yk.derrapando ? Math.max(1, yk.nivel) : 0, !yo.terminado || Math.abs(yk.vel) > 1);
   // ¿va al revés?
@@ -503,18 +509,19 @@ function sacudir(f) { temblor = Math.max(temblor, f); }
 function seguirCamara(dt) {
   const ct = C.yo.control, g = C.yo.mod.g.position;
   const f = ct.adelante(), velN = Math.abs(ct.vel) / AJUSTES.velMax, turbo = ct.tTurbo > 0;
-  const lejos = 7 + velN * 1.6 + (turbo ? 1.8 : 0), alto = 3 + velN * 0.4;
+  const fz = C.fuerzaVel || 0;
+  const lejos = 7 + Math.min(1, velN) * 1.4 + fz * 2.2, alto = 3 + velN * 0.4;
   camObj.copy(g).addScaledVector(f, -lejos).add(new THREE.Vector3(0, alto, 0));
   if (!C.camPos) C.camPos = camObj.clone();
   C.camPos.lerp(camObj, 1 - Math.exp(-(turbo ? 4.5 : 7) * dt));
   camara.position.copy(C.camPos);
   // a fondo, la cámara vibra un poquito (como el motor al máximo)
-  const vib = (C.pulso || 0) * 0.05;
+  const vib = (C.fuerzaVel || 0) * 0.05;
   camara.position.y += (Math.random() - 0.5) * vib;
   if (temblor > 0) { camara.position.x += (Math.random() - 0.5) * temblor; camara.position.y += (Math.random() - 0.5) * temblor; temblor = Math.max(0, temblor - dt * 2); }
   camMira.copy(g).addScaledVector(f, 4).y += 1.3;
   camara.lookAt(camMira);
-  const fovObj = (innerWidth < innerHeight ? 82 : 70) + (turbo ? 13 : 0) + velN * 5 + (ct.tEstrella > 0 ? 4 : 0);
+  const fovObj = (innerWidth < innerHeight ? 82 : 70) + fz * 12 + Math.min(1, velN) * 5 + (ct.tEstrella > 0 ? 4 : 0);
   camara.fov += (fovObj - camara.fov) * (1 - Math.exp(-4 * dt));
   camara.updateProjectionMatrix();
   sol.position.copy(g).add(new THREE.Vector3(60, 120, 40));
@@ -721,6 +728,7 @@ function vistaFondo(dt) {
   for (const r of remotos.values()) animarModelo(r.mod, dt, {});
   items?.actualizar(dt, [], [], () => {});
   lineas.actualizar(dt, 0);
+  viento.actualizar(dt, camara.position, new THREE.Vector3(0, 0, 1), 0, 0);
   zoomVel = 0;
 }
 
@@ -870,5 +878,5 @@ else if (ruta.startsWith("/contrarreloj")) contrarreloj();
 else pantallaInicio();
 bucle();
 // para pruebas: avanzar la simulación sin esperar a que dibuje
-window.__kart = { get C() { return C; }, get remotos() { return remotos; }, get recorrido() { return recorrido; }, get items() { return items; },
+window.__kart = { get C() { return C; }, viento, camara, get remotos() { return remotos; }, get recorrido() { return recorrido; }, get items() { return items; },
   entrada(e) { entradaPrueba = e; }, avanzar(seg) { for (let i = 0; i < seg * 60; i++) actualizarCarrera(1 / 60); } };

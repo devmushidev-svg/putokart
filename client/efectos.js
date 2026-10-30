@@ -152,3 +152,59 @@ export class Marcas {
   }
   cortar(clave) { this.ultimas.delete(clave); }
 }
+
+// ---------- viento: rayas quietas en el mundo, a los costados y arriba del kart ----------
+// Como están quietas en el mundo, pasan a la velocidad real del kart y con perspectiva (las cercanas
+// pasan rápido, las lejanas lento): eso se lee como velocidad mucho mejor que algo pegado a la pantalla.
+// Son cintas finas que siempre miran a la cámara, con la cola transparente.
+const texViento = (() => {
+  const c = document.createElement("canvas"); c.width = 8; c.height = 64;
+  const g = c.getContext("2d"), gr = g.createLinearGradient(0, 0, 0, 64);
+  gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.75, "rgba(255,255,255,.7)"); gr.addColorStop(1, "rgba(255,255,255,1)");
+  g.fillStyle = gr; g.fillRect(0, 0, 8, 64);
+  return new THREE.CanvasTexture(c);
+})();
+export class Viento {
+  constructor(escena, n = 50) {
+    this.n = n;
+    this.mat = new THREE.MeshBasicMaterial({ map: texViento, transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide });
+    this.malla = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), this.mat, n);
+    this.malla.frustumCulled = false;
+    this.malla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    escena.add(this.malla);
+    this.datos = Array.from({ length: n }, () => ({ vivo: false, p: new THREE.Vector3(), largo: 0, ancho: 0 }));
+    this.acum = 0;
+    this.m = new THREE.Matrix4(); this.x = new THREE.Vector3(); this.y = new THREE.Vector3(); this.c = new THREE.Vector3();
+    this.cero = new THREE.Matrix4().makeScale(0, 0, 0);
+  }
+  // pos y dir del kart (dir = hacia dónde se mueve), vel en m/s, intensidad 0..1, cam = posición de la cámara
+  actualizar(dt, pos, dir, vel, intensidad, color = 0xffffff, cam = pos) {
+    this.mat.color.set(color);
+    this.mat.opacity += (Math.min(0.85, intensidad * 1.2) - this.mat.opacity) * (1 - Math.exp(-8 * dt));
+    this.malla.visible = this.mat.opacity > 0.02;
+    this.acum = Math.min(this.acum + dt * intensidad * 60, 3);
+    const lado = new THREE.Vector3(dir.z, 0, -dir.x);
+    const L = Math.max(0.3, Math.abs(vel) * 0.14);
+    this.datos.forEach((d, i) => {
+      if (d.vivo && d.p.clone().sub(pos).dot(dir) < -7) d.vivo = false;
+      if (!d.vivo && this.acum >= 1) {
+        this.acum -= 1;
+        const s = Math.random() < 0.5 ? -1 : 1;
+        d.p.copy(pos).addScaledVector(dir, 8 + Math.random() * 22)
+          .addScaledVector(lado, s * (1.8 + Math.random() * 4.5)).add(new THREE.Vector3(0, 0.2 + Math.random() * 3, 0));
+        d.largo = 0.6 + Math.random() * 0.8; d.ancho = 0.08 + Math.random() * 0.08;
+        d.vivo = true;
+      }
+      if (!d.vivo) { this.malla.setMatrixAt(i, this.cero); return; }
+      // ejes: largo = dir, ancho = perpendicular a la vista, cara mirando a la cámara
+      this.c.copy(cam).sub(d.p);
+      this.x.crossVectors(this.c, dir).normalize();
+      this.y.crossVectors(dir, this.x);
+      const largo = d.largo * L;
+      this.m.makeBasis(this.x.multiplyScalar(d.ancho), this.y, dir.clone().multiplyScalar(largo));
+      this.m.setPosition(d.p.x - dir.x * largo * 0.5, d.p.y, d.p.z - dir.z * largo * 0.5);
+      this.malla.setMatrixAt(i, this.m);
+    });
+    this.malla.instanceMatrix.needsUpdate = true;
+  }
+}
